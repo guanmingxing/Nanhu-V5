@@ -365,7 +365,7 @@ class VLMergeBufferImp(implicit p: Parameters) extends BaseVMergeBuffer(isVStore
     val oldData = PriorityMux(Seq(
       (pipewbValidReg(0) && (wbIndexReg(0) === wbIndex)) -> mergeDataReg(0),
       (pipewbValidReg(1) && (wbIndexReg(1) === wbIndex)) -> mergeDataReg(1),
-      (pipewbValidReg(2) && (wbIndexReg(2) === wbIndex)) -> mergeDataReg(2),
+//      (pipewbValidReg(2) && (wbIndexReg(2) === wbIndex)) -> mergeDataReg(2),
       true.B                                             -> entries(wbIndex).data // default use entries_data
     ))
     val mergedData = mergeDataWithElemIdx(

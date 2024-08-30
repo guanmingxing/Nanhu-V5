@@ -108,10 +108,10 @@ case class XSCoreParameters
         ( 4096,  119,    8)),
   ITTageTableInfos: Seq[Tuple3[Int,Int,Int]] =
   //      Sets  Hist   Tag
-    Seq(( 256,    4,    9),
+    Seq(//( 256,    4,    9),
         ( 256,    8,    9),
-        ( 512,   13,    9),
-        ( 512,   16,    9),
+        //( 512,   13,    9),
+        //( 512,   16,    9),
         ( 512,   32,    9)),
   SCNRows: Int = 512,
   SCNTables: Int = 4,
@@ -141,13 +141,13 @@ case class XSCoreParameters
   },
   ICacheForceMetaECCError: Boolean = false,
   ICacheForceDataECCError: Boolean = false,
-  IBufSize: Int = 48,
-  IBufNBank: Int = 6, // IBuffer bank amount, should divide IBufSize
-  DecodeWidth: Int = 6,
-  RenameWidth: Int = 6,
-  CommitWidth: Int = 8,
-  RobCommitWidth: Int = 8,
-  RabCommitWidth: Int = 6,
+  IBufSize: Int = 32,
+  IBufNBank: Int = 4, // IBuffer bank amount, should divide IBufSize
+  DecodeWidth: Int = 4,
+  RenameWidth: Int = 4,
+  CommitWidth: Int = 4,
+  RobCommitWidth: Int = 4,
+  RabCommitWidth: Int = 4,
   MaxUopSize: Int = 65,
   EnableRenameSnapshot: Boolean = true,
   RenameSnapshotNum: Int = 4,
@@ -160,23 +160,23 @@ case class XSCoreParameters
   VlLogicRegs: Int = 1, // Vl
   V0_IDX: Int = 0,
   Vl_IDX: Int = 0,
-  NRPhyRegs: Int = 192,
-  VirtualLoadQueueSize: Int = 72,
-  LoadQueueRARSize: Int = 72,
-  LoadQueueRAWSize: Int = 64, // NOTE: make sure that LoadQueueRAWSize is power of 2.
+  NRPhyRegs: Int = 128,
+  VirtualLoadQueueSize: Int = 32,
+  LoadQueueRARSize: Int = 32,
+  LoadQueueRAWSize: Int = 32, // NOTE: make sure that LoadQueueRAWSize is power of 2.
   RollbackGroupSize: Int = 8,
-  LoadQueueReplaySize: Int = 72,
-  LoadUncacheBufferSize: Int = 20,
+  LoadQueueReplaySize: Int = 48,
+  LoadUncacheBufferSize: Int = 16,
   LoadQueueNWriteBanks: Int = 8, // NOTE: make sure that LoadQueueRARSize/LoadQueueRAWSize is divided by LoadQueueNWriteBanks
-  StoreQueueSize: Int = 64,
+  StoreQueueSize: Int = 48,
   StoreQueueNWriteBanks: Int = 8, // NOTE: make sure that StoreQueueSize is divided by StoreQueueNWriteBanks
   StoreQueueForwardWithMask: Boolean = true,
   VlsQueueSize: Int = 8,
   RobSize: Int = 160,
-  RabSize: Int = 256,
+  RabSize: Int = 96,
   VTypeBufferSize: Int = 64, // used to reorder vtype
-  IssueQueueSize: Int = 24,
-  IssueQueueCompEntrySize: Int = 16,
+  IssueQueueSize: Int = 12,
+  IssueQueueCompEntrySize: Int = 8,
   dpParams: DispatchParameters = DispatchParameters(
     IntDqSize = 16,
     FpDqSize = 16,
@@ -187,12 +187,12 @@ case class XSCoreParameters
     LsDqDeqWidth = 6,
   ),
   intPreg: PregParams = IntPregParams(
-    numEntries = 224,
+    numEntries = 128,
     numRead = None,
     numWrite = None,
   ),
   fpPreg: PregParams = FpPregParams(
-    numEntries = 192,
+    numEntries = 128,
     numRead = None,
     numWrite = None,
   ),
@@ -215,7 +215,7 @@ case class XSCoreParameters
   MemRegCacheSize: Int = 12,
   prefetcher: Option[PrefetcherParams] = Some(SMSParams()),
   IfuRedirectNum: Int = 1,
-  LoadPipelineWidth: Int = 3,
+  LoadPipelineWidth: Int = 2,
   StorePipelineWidth: Int = 2,
   VecLoadPipelineWidth: Int = 2,
   VecStorePipelineWidth: Int = 2,
@@ -335,7 +335,7 @@ case class XSCoreParameters
     tagECC = Some("secded"),
     dataECC = Some("secded"),
     replacer = Some("setplru"),
-    nMissEntries = 16,
+    nMissEntries = 12,
     nProbeEntries = 8,
     nReleaseEntries = 18,
     nMaxPrefetchEntry = 6,
@@ -467,9 +467,9 @@ case class XSCoreParameters
       IssueBlockParams(Seq(
         ExeUnitParams("LDU1", Seq(LduCfg), Seq(IntWB(6, 0), FpWB(6, 0)), Seq(Seq(IntRD(9, 0))), true, 2),
       ), numEntries = 16, numEnq = 1, numComp = 15),
-      IssueBlockParams(Seq(
-        ExeUnitParams("LDU2", Seq(LduCfg), Seq(IntWB(7, 0), FpWB(7, 0)), Seq(Seq(IntRD(10, 0))), true, 2),
-      ), numEntries = 16, numEnq = 1, numComp = 15),
+//      IssueBlockParams(Seq(
+//        ExeUnitParams("LDU2", Seq(LduCfg), Seq(IntWB(7, 0), FpWB(7, 0)), Seq(Seq(IntRD(10, 0))), true, 2),
+//      ), numEntries = 16, numEnq = 2, numComp = 14),
       IssueBlockParams(Seq(
         ExeUnitParams("VLSU0", Seq(VlduCfg, VstuCfg, VseglduSeg, VsegstuCfg), Seq(VfWB(4, 0), V0WB(4, 0)), Seq(Seq(VfRD(6, 0)), Seq(VfRD(7, 0)), Seq(VfRD(8, 0)), Seq(V0RD(2, 0)), Seq(VlRD(2, 0)))),
       ), numEntries = 16, numEnq = 1, numComp = 15),
@@ -496,8 +496,8 @@ case class XSCoreParameters
   def iqWakeUpParams = {
     Seq(
       WakeUpConfig(
-        Seq("ALU0", "ALU1", "ALU2", "ALU3", "LDU0", "LDU1", "LDU2") ->
-        Seq("ALU0", "BJU0", "ALU1", "BJU1", "ALU2", "BJU2", "ALU3", "BJU3", "LDU0", "LDU1", "LDU2", "STA0", "STA1", "STD0", "STD1")
+        Seq("ALU0", "ALU1", "ALU2", "ALU3", "LDU0", "LDU1") ->
+        Seq("ALU0", "BJU0", "ALU1", "BJU1", "ALU2", "BJU2", "ALU3", "BJU3", "LDU0", "LDU1", "STA0", "STA1", "STD0", "STD1")
       ),
       // TODO: add load -> fp slow wakeup
       WakeUpConfig(
