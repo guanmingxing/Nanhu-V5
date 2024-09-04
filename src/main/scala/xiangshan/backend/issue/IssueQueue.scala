@@ -851,8 +851,9 @@ class IssueQueueImp(override val wrapper: IssueQueue)(implicit p: Parameters, va
   }
   private val othersLeftOne = othersLeftOneCaseVec.map(_ === VecInit(validVec.drop(params.numEnq)).asUInt).reduce(_ | _)
   private val othersCanotIn = othersLeftOne || validVec.drop(params.numEnq).reduce(_ & _)
+  private val simpHasIssued = validVec.zip(issuedVec).drop(params.numEnq).take(params.numSimp).map(x => x._1 && x._2)
 
-  io.enq.foreach(_.ready := (!othersCanotIn || !enqHasValid) && !enqHasIssued)
+  io.enq.foreach(_.ready := ((!othersCanotIn && (params.numSimp.U - PopCount(simpHasIssued) >= enqEntryValidCnt)) || !enqHasValid) && !enqHasIssued)
   io.status.empty := !Cat(validVec).orR
   io.status.full := othersCanotIn
   io.status.validCnt := PopCount(validVec)
