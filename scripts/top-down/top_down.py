@@ -71,7 +71,11 @@ def proc_input(wl_df: pd.DataFrame, js: dict, workload: str):
     # We also sort the vec_weight by point
     wl_js = dict(js[workload])
     wl_df['cpi'] = 1.0 / wl_df['ipc']
-    vec_weight = pd.DataFrame.from_dict(wl_js['points'], orient='index')
+
+    if 'points' in wl_js:
+        vec_weight = pd.DataFrame.from_dict(wl_js['points'], orient='index')
+    else:
+        vec_weight = pd.DataFrame.from_dict(wl_js, orient='index') # for old checkpoint json file
 
     # convert string index into int64
     vec_weight.index = vec_weight.index.astype(np.int64)
@@ -110,7 +114,10 @@ def proc_bmk(bmk_df: pd.DataFrame, js: dict):
     input_dict = {}
     for workload in workloads:
         if workload.startswith(workload):
-            input_dict[workload] = int(js[workload]['insts'])
+            if 'insts' in js[workload]:
+                input_dict[workload] = int(js[workload]['insts'])
+            else:
+                input_dict[workload] = 1 # for old checkpoint json file
     input_insts = pd.DataFrame.from_dict(
         input_dict, orient='index', columns=['insts'])
     # make their sum equals 1.0

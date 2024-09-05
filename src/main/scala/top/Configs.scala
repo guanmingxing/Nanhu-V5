@@ -436,16 +436,6 @@ class WithNanhuV5Config extends Config((site, here, up) =>{
     LoadUncacheBufferSize = 16,     // Default: 20
     StoreQueueSize = 48,            // Default: 64
     LoadPipelineWidth = 2,          // Default: 3
-
-    dcacheParametersOpt = Some(DCacheParameters(
-      tagECC = Some("secded"),
-      dataECC = Some("secded"),
-      replacer = Some("setplru"),
-      nMissEntries = 12,            // Default: 16
-      nProbeEntries = 8,
-      nReleaseEntries = 18,
-      nMaxPrefetchEntry = 6,
-    )),
   ))
 })
 
