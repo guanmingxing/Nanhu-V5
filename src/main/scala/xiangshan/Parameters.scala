@@ -467,9 +467,9 @@ case class XSCoreParameters
       IssueBlockParams(Seq(
         ExeUnitParams("LDU1", Seq(LduCfg), Seq(IntWB(6, 0), FpWB(6, 0)), Seq(Seq(IntRD(9, 0))), true, 2),
       ), numEntries = 16, numEnq = 1, numComp = 15),
-      IssueBlockParams(Seq(
-        ExeUnitParams("LDU2", Seq(LduCfg), Seq(IntWB(7, 0), FpWB(7, 0)), Seq(Seq(IntRD(10, 0))), true, 2),
-      ), numEntries = 16, numEnq = 1, numComp = 15),
+//      IssueBlockParams(Seq(
+//        ExeUnitParams("LDU2", Seq(LduCfg), Seq(IntWB(7, 0), FpWB(7, 0)), Seq(Seq(IntRD(10, 0))), true, 2),
+//      ), numEntries = 16, numEnq = 2, numComp = 14),
       IssueBlockParams(Seq(
         ExeUnitParams("VLSU0", Seq(VlduCfg, VstuCfg, VseglduSeg, VsegstuCfg), Seq(VfWB(4, 0), V0WB(4, 0)), Seq(Seq(VfRD(6, 0)), Seq(VfRD(7, 0)), Seq(VfRD(8, 0)), Seq(V0RD(2, 0)), Seq(VlRD(2, 0)))),
       ), numEntries = 16, numEnq = 1, numComp = 15),
@@ -496,8 +496,8 @@ case class XSCoreParameters
   def iqWakeUpParams = {
     Seq(
       WakeUpConfig(
-        Seq("ALU0", "ALU1", "ALU2", "ALU3", "LDU0", "LDU1", "LDU2") ->
-        Seq("ALU0", "BJU0", "ALU1", "BJU1", "ALU2", "BJU2", "ALU3", "BJU3", "LDU0", "LDU1", "LDU2", "STA0", "STA1", "STD0", "STD1")
+        Seq("ALU0", "ALU1", "ALU2", "ALU3", "LDU0", "LDU1") ->
+        Seq("ALU0", "BJU0", "ALU1", "BJU1", "ALU2", "BJU2", "ALU3", "BJU3", "LDU0", "LDU1", "STA0", "STA1", "STD0", "STD1")
       ),
       // TODO: add load -> fp slow wakeup
       WakeUpConfig(
