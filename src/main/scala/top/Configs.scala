@@ -33,7 +33,7 @@ import utils._
 import huancun._
 import xiangshan._
 import xiangshan.backend.dispatch.DispatchParameters
-import xiangshan.backend.regfile.{IntPregParams, VfPregParams}
+import xiangshan.backend.regfile.{IntPregParams, FpPregParams, VfPregParams}
 import xiangshan.cache.DCacheParameters
 import xiangshan.cache.mmu.{L2TLBParameters, TLBParameters}
 import device.{EnableJtag, XSDebugModuleParams}
@@ -398,6 +398,62 @@ class DefaultConfig(n: Int = 1) extends Config(
     ++ new WithNKBL2(2 * 512, inclusive = true, banks = 4)
     ++ new WithNKBL1D(64, ways = 8)
     ++ new BaseConfig(n)
+)
+
+class WithNanhuV5Config extends Config((site, here, up) =>{
+  case XSTileKey => up(XSTileKey).map(_.copy(
+
+    ITTageTableInfos = Seq(         // Default: 5table
+      ( 256,    8,    9),
+      ( 512,   32,    9)
+    ),
+
+    IBufSize = 32,                  // Default: 48
+    IBufNBank = 4,                  // Default: 6
+    DecodeWidth = 4,                // Default: 6
+    RenameWidth = 4,                // Default: 6
+    CommitWidth = 4,                // Default: 8
+    RobCommitWidth = 4,             // Default: 8
+    RabCommitWidth = 4,             // Default: 6
+    RabSize = 96,                   // Default: 256
+    IssueQueueSize = 12,            // Default: 24
+    IssueQueueCompEntrySize = 8,    // Default: 16
+    NRPhyRegs = 128,                // Default: 192
+    intPreg = IntPregParams(        // Default:
+      numEntries = 128,             // Default: 224
+      numRead = None,               // Default:
+      numWrite = None,              // Default:
+    ),                              // Default:
+    fpPreg = FpPregParams(          // Default:
+      numEntries = 128,             // Default: 192
+      numRead = None,               // Default:
+      numWrite = None,              // Default:
+    ),                              // Default:
+    VirtualLoadQueueSize = 32,      // Default: 72
+    LoadQueueRARSize = 32,          // Default: 72
+    LoadQueueRAWSize = 32,          // Default: 64
+    LoadQueueReplaySize = 48,       // Default: 72
+    LoadUncacheBufferSize = 16,     // Default: 20
+    StoreQueueSize = 48,            // Default: 64
+    LoadPipelineWidth = 2,          // Default: 3
+
+    dcacheParametersOpt = Some(DCacheParameters(
+      tagECC = Some("secded"),
+      dataECC = Some("secded"),
+      replacer = Some("setplru"),
+      nMissEntries = 12,            // Default: 16
+      nProbeEntries = 8,
+      nReleaseEntries = 18,
+      nMaxPrefetchEntry = 6,
+    )),
+  ))
+})
+
+class NanhuV5Config(n: Int = 1) extends Config(
+  new WithNanhuV5Config
+    ++ new WithNKBL2(2 * 128, inclusive = true, banks = 2, ways = 8)
+    ++ new WithNKBL1D(32, ways = 4)
+    ++ new DefaultConfig(n)
 )
 
 class WithCHI extends Config((_, _, _) => {
