@@ -1414,12 +1414,12 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
     ldu(w).io.wbq_block_miss_req     := wb.io.block_miss_req(w)
   }
 
-  wb.io.miss_req_conflict_check(3) := mainPipe.io.wbq_conflict_check
-  mainPipe.io.wbq_block_miss_req   := wb.io.block_miss_req(3)
+  wb.io.miss_req_conflict_check(2) := mainPipe.io.wbq_conflict_check
+  mainPipe.io.wbq_block_miss_req   := wb.io.block_miss_req(2)
   
-  wb.io.miss_req_conflict_check(4).valid := missReqArb.io.out.valid
-  wb.io.miss_req_conflict_check(4).bits  := missReqArb.io.out.bits.addr
-  missQueue.io.wbq_block_miss_req := wb.io.block_miss_req(4)
+  wb.io.miss_req_conflict_check(3).valid := missReqArb.io.out.valid
+  wb.io.miss_req_conflict_check(3).bits  := missReqArb.io.out.bits.addr
+  missQueue.io.wbq_block_miss_req := wb.io.block_miss_req(3)
 
   missReqArb.io.out <> missQueue.io.req
   missReadyGen.io.queryMQ <> missQueue.io.queryMQ
