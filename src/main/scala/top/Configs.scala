@@ -441,9 +441,10 @@ class WithNanhuV5Config extends Config((site, here, up) =>{
 
 class NanhuV5Config(n: Int = 1) extends Config(
   new WithNanhuV5Config
-    ++ new WithNKBL2(2 * 128, inclusive = true, banks = 2, ways = 8)
-    ++ new WithNKBL1D(32, ways = 4)
-    ++ new DefaultConfig(n)
+    ++ new WithNKBL3(4 * 1024, inclusive = false, banks = 4, ways = 8)
+    ++ new WithNKBL2(256, inclusive = true, banks = 2, ways = 8)
+    ++ new WithNKBL1D(64, ways = 8)
+    ++ new BaseConfig(n)
 )
 
 class WithCHI extends Config((_, _, _) => {
