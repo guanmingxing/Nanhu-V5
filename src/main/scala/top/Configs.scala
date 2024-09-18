@@ -250,6 +250,21 @@ class MinimalSimConfig(n: Int = 1) extends Config(
   })
 )
 
+class WithNKBL1I(n: Int, ways: Int = 4) extends Config((site, here, up) => {
+  case XSTileKey =>
+    val sets = n * 1024 / ways / 64
+    up(XSTileKey).map(_.copy(
+      icacheParameters = ICacheParameters(
+        nSets = sets,
+        nWays = ways,
+        tagECC = Some("parity"),
+        dataECC = Some("parity"),
+        replacer = Some("setplru")
+      )
+    ))
+})
+
+
 class WithNKBL1D(n: Int, ways: Int = 8) extends Config((site, here, up) => {
   case XSTileKey =>
     val sets = n * 1024 / ways / 64
@@ -439,11 +454,31 @@ class WithNanhuV5Config extends Config((site, here, up) =>{
   ))
 })
 
+
+/** Nanhu V5.0 Config
+ *  64KB L1i + 64KB L1d
+ *  256KB L2
+ *  4096KB L3
+ */
 class NanhuV5Config(n: Int = 1) extends Config(
   new WithNanhuV5Config
     ++ new WithNKBL3(4 * 1024, inclusive = false, banks = 4, ways = 8)
     ++ new WithNKBL2(256, inclusive = true, banks = 2, ways = 8)
     ++ new WithNKBL1D(64, ways = 8)
+    ++ new BaseConfig(n)
+)
+
+/** Nanhu V5.1 Config
+ *  32KB L1i + 32KB L1d
+ *  128KB L2
+ *  4096KB L3
+ */
+class NanhuV5_1Config(n: Int = 1) extends Config(
+  new WithNanhuV5Config
+    ++ new WithNKBL3(4 * 1024, inclusive = false, banks = 4, ways = 8)
+    ++ new WithNKBL2(128, inclusive = true, banks = 2, ways = 8)
+    ++ new WithNKBL1I(32, ways = 4)
+    ++ new WithNKBL1D(32, ways = 4)
     ++ new BaseConfig(n)
 )
 
