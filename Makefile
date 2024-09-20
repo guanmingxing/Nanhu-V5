@@ -33,6 +33,7 @@ TEST_FILE = $(shell find ./src/test/scala -name '*.scala')
 
 MEM_GEN = ./scripts/vlsi_mem_gen
 MEM_GEN_SEP = ./scripts/gen_sep_mem.sh
+ABS_WORK_DIR := $(shell pwd)
 
 CONFIG ?= DefaultConfig
 NUM_CORES ?= 1
@@ -217,6 +218,20 @@ emu: sim-verilog
 
 emu-run: emu
 	$(MAKE) -C ./difftest emu-run SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES) RTL_SUFFIX=$(RTL_SUFFIX)
+
+RANDOM = $(shell echo $$RANDOM)
+RUN_BIN_DIR ?= $(ABS_WORK_DIR)/ready-to-run
+EMU_RUN_OPTS = -i $(RUN_BIN_DIR)/$(RUN_BIN)
+EMU_RUN_OPTS += --diff $(ABS_WORK_DIR)/ready-to-run/riscv64-spike-so
+EMU_RUN_OPTS += --wave-path $(ABS_WORK_DIR)/sim/emu/$(RUN_BIN)/tb_top.vcd
+EMU_RUN_OPTS += --enable-fork --fork-interval=15 -s $(RANDOM)
+emu_rtl-run:
+	$(shell if [ ! -e $(ABS_WORK_DIR)/sim/emu/$(RUN_BIN) ];then mkdir -p $(ABS_WORK_DIR)/sim/emu/$(RUN_BIN); fi)
+	touch ./sim/emu/$(RUN_BIN)/sim.log
+	$(shell if [ -e $(ABS_WORK_DIR)/sim/emu/$(RUN_BIN)/emu ];then rm -f $(ABS_WORK_DIR)/sim/emu/$(RUN_BIN)/emu; fi)
+	ln -s $(ABS_WORK_DIR)/build/emu $(ABS_WORK_DIR)/sim/emu/$(RUN_BIN)/emu
+	cd sim/emu/$(RUN_BIN) && (./emu $(EMU_RUN_OPTS) 2> assert.log | tee sim.log)
+
 
 # vcs simulation
 simv: sim-verilog
