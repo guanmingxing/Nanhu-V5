@@ -455,6 +455,46 @@ class WithNanhuV5Config extends Config((site, here, up) =>{
 })
 
 
+class WithNanhuV5_2Config extends Config((site, here, up) =>{
+  case XSTileKey => up(XSTileKey).map(_.copy(
+
+    ITTageTableInfos = Seq(         // Default: 5table
+      ( 256,    8,    9),
+      ( 512,   32,    9)
+    ),
+
+    IBufSize = 32,                  // Default: 48
+    IBufNBank = 4,                  // Default: 6
+    DecodeWidth = 4,                // Default: 6
+    RenameWidth = 4,                // Default: 6
+    CommitWidth = 8,                // Default: 8
+    RobCommitWidth = 8,             // Default: 8
+    RabCommitWidth = 4,             // Default: 6
+    RobSize = 96,                   // Default: 160
+    RabSize = 120,                  // Default: 256
+    IssueQueueSize = 16,            // Default: 24
+    IssueQueueCompEntrySize = 12,   // Default: 16
+    NRPhyRegs = 128,                // Default: 192
+    intPreg = IntPregParams(        // Default:
+      numEntries = 128,             // Default: 224
+      numRead = None,               // Default:
+      numWrite = None,              // Default:
+    ),                              // Default:
+    fpPreg = FpPregParams(          // Default:
+      numEntries = 128,             // Default: 192
+      numRead = None,               // Default:
+      numWrite = None,              // Default:
+    ),                              // Default:
+    VirtualLoadQueueSize = 48,      // Default: 72
+    LoadQueueRARSize = 48,          // Default: 72
+    LoadQueueRAWSize = 24,          // Default: 64
+    LoadQueueReplaySize = 48,       // Default: 72
+    LoadUncacheBufferSize = 8,      // Default: 20
+    StoreQueueSize = 40,            // Default: 64
+    LoadPipelineWidth = 2,          // Default: 3
+  ))
+})
+
 /** Nanhu V5.0 Config
  *  64KB L1i + 64KB L1d
  *  256KB L2
@@ -475,6 +515,21 @@ class NanhuV5Config(n: Int = 1) extends Config(
  */
 class NanhuV5_1Config(n: Int = 1) extends Config(
   new WithNanhuV5Config
+    ++ new WithNKBL3(4 * 1024, inclusive = false, banks = 4, ways = 8)
+    ++ new WithNKBL2(128, inclusive = true, banks = 2, ways = 8)
+    ++ new WithNKBL1I(32, ways = 4)
+    ++ new WithNKBL1D(32, ways = 4)
+    ++ new BaseConfig(n)
+)
+
+/** Nanhu V5.2 Config
+ *  WithNanhuV5_2Config
+ *  32KB L1i + 32KB L1d
+ *  128KB L2
+ *  4096KB L3
+ */
+class NanhuV5_2Config(n: Int = 1) extends Config(
+  new WithNanhuV5_2Config
     ++ new WithNKBL3(4 * 1024, inclusive = false, banks = 4, ways = 8)
     ++ new WithNKBL2(128, inclusive = true, banks = 2, ways = 8)
     ++ new WithNKBL1I(32, ways = 4)
