@@ -13,21 +13,17 @@
  * See the Mulan PSL v2 for more details.
  ***************************************************************************************/
 
-package device
+package xiangshan
 
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy._
-import org.chipsalliance.cde.config.Parameters
-import freechips.rocketchip.tilelink._
 import freechips.rocketchip.regmapper._
+import freechips.rocketchip.tilelink._
+import org.chipsalliance.cde.config.Parameters
 import utility._
-import freechips.rocketchip.prci.{ClockSinkDomain}
-import freechips.rocketchip.util._
-import utils._
 
 // _root_ disambiguates from package chisel3.util.circt if user imports chisel3.util._
-import _root_.circt.stage.ChiselStage
 
 object pow2 {
   def apply(n: Int): Long = 1L << n

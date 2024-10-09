@@ -33,6 +33,7 @@ import xiangshan.backend.fu.NewCSR.CSREvents.TargetPCBundle
 import xiangshan.backend.fu.NewCSR.CSRNamedConstant.ContextStatus
 import xiangshan.backend.rob.RobPtr
 import utils.MathUtils.{BigIntGenMask, BigIntNot}
+import xiangshan.backend.fu.NewCSR.{AIAToCSRBundle, CSRToAIABundle}
 
 class FpuCsrIO extends Bundle {
   val fflags = Output(Valid(UInt(5.W)))
@@ -112,6 +113,9 @@ class CSRFileIO(implicit p: Parameters) extends XSBundle {
   val customCtrl = Output(new CustomCSRCtrlIO)
   // instruction fetch address translation type
   val instrAddrTransType = Output(new AddrTransType)
+  // for aia
+  val toAIA = Output(new CSRToAIABundle)
+  val fromAIA = Flipped(Output(new AIAToCSRBundle))
 }
 
 class VtypeStruct(implicit p: Parameters) extends XSBundle {

@@ -27,13 +27,14 @@ import utils.{HPerfMonitor, HasPerfEvents, PerfEvent}
 import xiangshan._
 import xiangshan.backend.Bundles.{DynInst, IssueQueueIQWakeUpBundle, LoadShouldCancel, MemExuInput, MemExuOutput, VPUCtrlSignals}
 import xiangshan.backend.ctrlblock.{DebugLSIO, LsTopdownInfo}
-import xiangshan.backend.datapath.DataConfig.{IntData, VecData, FpData}
+import xiangshan.backend.datapath.DataConfig.{FpData, IntData, VecData}
 import xiangshan.backend.datapath.RdConfig.{IntRD, VfRD}
 import xiangshan.backend.datapath.WbConfig._
 import xiangshan.backend.datapath.DataConfig._
 import xiangshan.backend.datapath._
 import xiangshan.backend.dispatch.CoreDispatchTopDownIO
 import xiangshan.backend.exu.ExuBlock
+import xiangshan.backend.fu.NewCSR.{AIAToCSRBundle, CSRToAIABundle}
 import xiangshan.backend.fu.vector.Bundles.{VConfig, VType}
 import xiangshan.backend.fu.{FenceIO, FenceToSbuffer, FuConfig, FuType, PFEvent, PerfCounterIO}
 import xiangshan.backend.issue.EntryBundles._
@@ -691,6 +692,9 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
 
   io.debugRolling := ctrlBlock.io.debugRolling
 
+  io.toAIA <> csrio.toAIA
+  csrio.fromAIA <> io.fromAIA
+
   if(backendParams.debugEn) {
     dontTouch(memScheduler.io)
     dontTouch(dataPath.io.toMemExu)
@@ -880,4 +884,8 @@ class BackendIO(implicit p: Parameters, params: BackendParams) extends XSBundle 
     val fromCore = new CoreDispatchTopDownIO
   }
   val debugRolling = new RobDebugRollingIO
+
+  // for aia
+  val toAIA = Output(new CSRToAIABundle)
+  val fromAIA = Flipped(Output(new AIAToCSRBundle))
 }
