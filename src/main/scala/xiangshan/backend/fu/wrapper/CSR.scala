@@ -8,11 +8,12 @@ import xiangshan._
 import xiangshan.backend.fu.NewCSR._
 import xiangshan.backend.fu.util._
 import xiangshan.backend.fu.{FuConfig, FuncUnit}
-import device._
+import device.{IMSICParams, TLIMSIC, _}
 import system.HasSoCParameter
 import xiangshan.ExceptionNO._
 import xiangshan.backend.Bundles.TrapInstInfo
 import xiangshan.backend.decode.Imm_Z
+import freechips.rocketchip.diplomacy.LazyModule
 import xiangshan.backend.fu.NewCSR.CSRBundles.PrivState
 import xiangshan.backend.fu.NewCSR.CSRDefines.PrivMode
 import xiangshan.frontend.FtqPtr
@@ -179,30 +180,56 @@ class CSR(cfg: FuConfig)(implicit p: Parameters) extends FuncUnit(cfg)
   trapTvalMod.io.fromCtrlBlock.flush := io.flush
   trapTvalMod.io.fromCtrlBlock.robDeqPtr := io.csrio.get.robDeqPtr
 
-  private val imsic = Module(new IMSIC(NumVSIRFiles = 5, NumHart = 1, XLEN = 64, NumIRSrc = 256))
-  imsic.i.hartId := io.csrin.get.hartId
-  imsic.i.msiInfo := io.csrin.get.msiInfo
-  imsic.i.csr.addr.valid := csrMod.toAIA.addr.valid
-  imsic.i.csr.addr.bits.addr := csrMod.toAIA.addr.bits.addr
-  imsic.i.csr.addr.bits.prvm := csrMod.toAIA.addr.bits.prvm.asUInt
-  imsic.i.csr.addr.bits.v := csrMod.toAIA.addr.bits.v.asUInt
-  imsic.i.csr.vgein := csrMod.toAIA.vgein
-  imsic.i.csr.mClaim := csrMod.toAIA.mClaim
-  imsic.i.csr.sClaim := csrMod.toAIA.sClaim
-  imsic.i.csr.vsClaim := csrMod.toAIA.vsClaim
-  imsic.i.csr.wdata.valid := csrMod.toAIA.wdata.valid
-  imsic.i.csr.wdata.bits.op := csrMod.toAIA.wdata.bits.op
-  imsic.i.csr.wdata.bits.data := csrMod.toAIA.wdata.bits.data
+//  private val imsic = Module(new IMSIC(NumVSIRFiles = 5, NumHart = 1, XLEN = 64, NumIRSrc = 256))
+//  imsic.i.hartId := io.csrin.get.hartId
+//  imsic.i.msiInfo := io.csrin.get.msiInfo
+//  imsic.i.csr.addr.valid := csrMod.toAIA.addr.valid
+//  imsic.i.csr.addr.bits.addr := csrMod.toAIA.addr.bits.addr
+//  imsic.i.csr.addr.bits.prvm := csrMod.toAIA.addr.bits.prvm.asUInt
+//  imsic.i.csr.addr.bits.v := csrMod.toAIA.addr.bits.v.asUInt
+//  imsic.i.csr.vgein := csrMod.toAIA.vgein
+//  imsic.i.csr.mClaim := csrMod.toAIA.mClaim
+//  imsic.i.csr.sClaim := csrMod.toAIA.sClaim
+//  imsic.i.csr.vsClaim := csrMod.toAIA.vsClaim
+//  imsic.i.csr.wdata.valid := csrMod.toAIA.wdata.valid
+//  imsic.i.csr.wdata.bits.op := csrMod.toAIA.wdata.bits.op
+//  imsic.i.csr.wdata.bits.data := csrMod.toAIA.wdata.bits.data
+//
+//  csrMod.fromAIA.rdata.valid        := imsic.o.csr.rdata.valid
+//  csrMod.fromAIA.rdata.bits.data    := imsic.o.csr.rdata.bits.rdata
+//  csrMod.fromAIA.rdata.bits.illegal := imsic.o.csr.rdata.bits.illegal
+//  csrMod.fromAIA.meip    := imsic.o.meip
+//  csrMod.fromAIA.seip    := imsic.o.seip
+//  csrMod.fromAIA.vseip   := imsic.o.vseip
+//  csrMod.fromAIA.mtopei  := imsic.o.mtopei
+//  csrMod.fromAIA.stopei  := imsic.o.stopei
+//  csrMod.fromAIA.vstopei := imsic.o.vstopei
 
-  csrMod.fromAIA.rdata.valid        := imsic.o.csr.rdata.valid
-  csrMod.fromAIA.rdata.bits.data    := imsic.o.csr.rdata.bits.rdata
-  csrMod.fromAIA.rdata.bits.illegal := imsic.o.csr.rdata.bits.illegal
-  csrMod.fromAIA.meip    := imsic.o.meip
-  csrMod.fromAIA.seip    := imsic.o.seip
-  csrMod.fromAIA.vseip   := imsic.o.vseip
-  csrMod.fromAIA.mtopei  := imsic.o.mtopei
-  csrMod.fromAIA.stopei  := imsic.o.stopei
-  csrMod.fromAIA.vstopei := imsic.o.vstopei
+  private val imsic_wrapper = LazyModule(new TLIMSIC(IMSICParams())(p))
+  imsic_wrapper.module.fromCSR <> csrMod.toAIA
+//  imsic.i.hartId := io.csrin.get.hartId
+//  imsic.i.msiInfo := io.csrin.get.msiInfo
+  imsic_wrapper.module.fromCSR.addr.valid := csrMod.toAIA.addr.valid
+  imsic_wrapper.module.fromCSR.addr.bits := csrMod.toAIA.addr.bits.addr
+  imsic_wrapper.module.fromCSR.priv := csrMod.toAIA.addr.bits.prvm.asUInt
+  imsic_wrapper.module.fromCSR.virt := csrMod.toAIA.addr.bits.v.asUInt
+  imsic_wrapper.module.fromCSR.vgein := csrMod.toAIA.vgein
+  imsic_wrapper.module.fromCSR.claims(0) := csrMod.toAIA.mClaim
+  imsic_wrapper.module.fromCSR.claims(1) := csrMod.toAIA.sClaim
+  imsic_wrapper.module.fromCSR.claims(2) := csrMod.toAIA.vsClaim
+  imsic_wrapper.module.fromCSR.wdata.valid := csrMod.toAIA.wdata.valid
+  imsic_wrapper.module.fromCSR.wdata.bits.op := csrMod.toAIA.wdata.bits.op
+  imsic_wrapper.module.fromCSR.wdata.bits.data := csrMod.toAIA.wdata.bits.data
+
+  csrMod.fromAIA.rdata.valid := imsic_wrapper.module.toCSR.rdata.valid
+  csrMod.fromAIA.rdata.bits.data := imsic_wrapper.module.toCSR.rdata.bits
+  csrMod.fromAIA.rdata.bits.illegal := imsic_wrapper.module.toCSR.illegal
+  csrMod.fromAIA.meip := imsic_wrapper.module.toCSR.pendings(0)
+  csrMod.fromAIA.seip := imsic_wrapper.module.toCSR.pendings(1)
+  csrMod.fromAIA.vseip := imsic_wrapper.module.toCSR.pendings(2)
+  csrMod.fromAIA.mtopei := imsic_wrapper.module.toCSR.topeis(0)
+  csrMod.fromAIA.stopei := imsic_wrapper.module.toCSR.topeis(1)
+  csrMod.fromAIA.vstopei := imsic_wrapper.module.toCSR.topeis(2)
 
   private val exceptionVec = WireInit(0.U.asTypeOf(ExceptionVec())) // Todo:
 
