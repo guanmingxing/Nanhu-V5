@@ -164,6 +164,7 @@ class Backend(val params: BackendParams)(implicit p: Parameters) extends LazyMod
   val fpExuBlock = params.fpSchdParams.map(x => LazyModule(new ExuBlock(x)))
   val vfExuBlock = params.vfSchdParams.map(x => LazyModule(new ExuBlock(x)))
   val wbFuBusyTable = LazyModule(new WbFuBusyTable(params))
+  val imsic = LazyModule(new TLIMSIC(IMSICParams())(params))
 
   lazy val module = new BackendImp(this)
 }
@@ -189,6 +190,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   private val bypassNetwork = Module(new BypassNetwork)
   private val wbDataPath = Module(new WbDataPath(params))
   private val wbFuBusyTable = wrapper.wbFuBusyTable.module
+  private val imsic = wrapper.imsic.module
 
   private val iqWakeUpMappedBundle: Map[Int, ValidIO[IssueQueueIQWakeUpBundle]] = (
     intScheduler.io.toSchedulers.wakeupVec ++
@@ -692,8 +694,29 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
 
   io.debugRolling := ctrlBlock.io.debugRolling
 
-  io.toAIA <> csrio.toAIA
-  csrio.fromAIA <> io.fromAIA
+//  io.toAIA <> csrio.toAIA
+//  csrio.fromAIA <> io.fromAIA
+  imsic.fromCSR.addr.valid := csrio.toAIA.addr.valid
+  imsic.fromCSR.addr.bits := csrio.toAIA.addr.bits.addr
+  imsic.fromCSR.priv := csrio.toAIA.addr.bits.prvm.asUInt
+  imsic.fromCSR.virt := csrio.toAIA.addr.bits.v.asUInt
+  imsic.fromCSR.vgein := csrio.toAIA.vgein
+  imsic.fromCSR.claims(0) := csrio.toAIA.mClaim
+  imsic.fromCSR.claims(1) := csrio.toAIA.sClaim
+  imsic.fromCSR.claims(2) := csrio.toAIA.vsClaim
+  imsic.fromCSR.wdata.valid := csrio.toAIA.wdata.valid
+  imsic.fromCSR.wdata.bits.op := csrio.toAIA.wdata.bits.op
+  imsic.fromCSR.wdata.bits.data := csrio.toAIA.wdata.bits.data
+
+  csrio.fromAIA.rdata.valid := imsic.toCSR.rdata.valid
+  csrio.fromAIA.rdata.bits.data := imsic.toCSR.rdata.bits
+  csrio.fromAIA.rdata.bits.illegal := imsic.toCSR.illegal
+  csrio.fromAIA.meip := imsic.toCSR.pendings(0)
+  csrio.fromAIA.seip := imsic.toCSR.pendings(1)
+  csrio.fromAIA.vseip := imsic.toCSR.pendings(2)
+  csrio.fromAIA.mtopei := imsic.toCSR.topeis(0)
+  csrio.fromAIA.stopei := imsic.toCSR.topeis(1)
+  csrio.fromAIA.vstopei := imsic.toCSR.topeis(2)
 
   if(backendParams.debugEn) {
     dontTouch(memScheduler.io)
