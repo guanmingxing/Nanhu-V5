@@ -18,10 +18,14 @@ package xiangshan
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.regmapper._
-import freechips.rocketchip.tilelink._
 import org.chipsalliance.cde.config.Parameters
+import freechips.rocketchip.tilelink._
+import freechips.rocketchip.regmapper._
 import utility._
+import freechips.rocketchip.prci.{ClockSinkDomain}
+import freechips.rocketchip.util._
+import utils._
+import xiangshan.backend.fu.NewCSR.CSRDefines.PrivMode
 
 // _root_ disambiguates from package chisel3.util.circt if user imports chisel3.util._
 
@@ -158,10 +162,10 @@ class TLIMSIC(
   class CSRToIMSICBundle extends Bundle {
     val addr = ValidIO(UInt(params.iselectWidth.W))
     val virt = Bool()
-    val priv = PrivType()
+    val priv = PrivMode()
     val vgein = UInt(params.vgeinWidth.W)
     val wdata = ValidIO(new Bundle {
-      val op = OpType()
+      val op = UInt(2.W)
       val data = UInt(params.xlen.W)
     })
     val claims = Vec(params.privNum, Bool())
@@ -177,7 +181,7 @@ class TLIMSIC(
       val seteipnum = ValidIO(UInt(32.W))
       val addr = ValidIO(UInt(params.iselectWidth.W))
       val wdata = ValidIO(new Bundle {
-        val op = OpType()
+        val op = UInt(2.W)
         val data = UInt(params.xlen.W)
       })
       val claim = Bool()
@@ -199,8 +203,9 @@ class TLIMSIC(
     locally { // scope for xiselect CSR reg map
       val wdata = WireDefault(0.U(params.xlen.W))
       val wmask = WireDefault(0.U(params.xlen.W))
+      val wdata_optype = fromCSR.wdata.bits.op.asTypeOf(OpType())
       when(fromCSR.wdata.valid) {
-        switch(fromCSR.wdata.bits.op) {
+        switch(wdata_optype) {
           is(OpType.ILLEGAL) {
             illegal_wdata_op := true.B
           }

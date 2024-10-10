@@ -173,28 +173,6 @@ class XSCoreImp(outer: XSCoreBase) extends LazyModuleImp(outer)
   backend.io.perf.retiredInstr := DontCare
   backend.io.perf.ctrlInfo := DontCare
 
-//  imsic.fromCSR.addr.valid := backend.io.toAIA.addr.valid
-//  imsic.fromCSR.addr.bits := backend.io.toAIA.addr.bits.addr
-//  imsic.fromCSR.priv := backend.io.toAIA.addr.bits.prvm.asUInt
-//  imsic.fromCSR.virt := backend.io.toAIA.addr.bits.v.asUInt
-//  imsic.fromCSR.vgein := backend.io.toAIA.vgein
-//  imsic.fromCSR.claims(0) := backend.io.toAIA.mClaim
-//  imsic.fromCSR.claims(1) := backend.io.toAIA.sClaim
-//  imsic.fromCSR.claims(2) := backend.io.toAIA.vsClaim
-//  imsic.fromCSR.wdata.valid := backend.io.toAIA.wdata.valid
-//  imsic.fromCSR.wdata.bits.op := backend.io.toAIA.wdata.bits.op
-//  imsic.fromCSR.wdata.bits.data := backend.io.toAIA.wdata.bits.data
-//
-//  backend.io.fromAIA.rdata.valid := imsic.toCSR.rdata.valid
-//  backend.io.fromAIA.rdata.bits.data := imsic.toCSR.rdata.bits
-//  backend.io.fromAIA.rdata.bits.illegal := imsic.toCSR.illegal
-//  backend.io.fromAIA.meip := imsic.toCSR.pendings(0)
-//  backend.io.fromAIA.seip := imsic.toCSR.pendings(1)
-//  backend.io.fromAIA.vseip := imsic.toCSR.pendings(2)
-//  backend.io.fromAIA.mtopei := imsic.toCSR.topeis(0)
-//  backend.io.fromAIA.stopei := imsic.toCSR.topeis(1)
-//  backend.io.fromAIA.vstopei := imsic.toCSR.topeis(2)
-
   // top -> memBlock
   memBlock.io.fromTopToBackend.clintTime := io.clintTime
   memBlock.io.fromTopToBackend.msiInfo := io.msiInfo

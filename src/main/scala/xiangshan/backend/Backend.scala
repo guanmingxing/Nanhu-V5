@@ -20,7 +20,8 @@ import org.chipsalliance.cde.config.Parameters
 import chisel3._
 import chisel3.util._
 import device.MsiInfoBundle
-import freechips.rocketchip.diplomacy.{LazyModule, LazyModuleImp}
+import freechips.rocketchip.diplomacy.{IdRange, LazyModule, LazyModuleImp}
+import freechips.rocketchip.tilelink.{TLClientNode, TLMasterParameters, TLMasterPortParameters}
 import system.HasSoCParameter
 import utility._
 import utils.{HPerfMonitor, HasPerfEvents, PerfEvent}
@@ -164,7 +165,17 @@ class Backend(val params: BackendParams)(implicit p: Parameters) extends LazyMod
   val fpExuBlock = params.fpSchdParams.map(x => LazyModule(new ExuBlock(x)))
   val vfExuBlock = params.vfSchdParams.map(x => LazyModule(new ExuBlock(x)))
   val wbFuBusyTable = LazyModule(new WbFuBusyTable(params))
-  val imsic = LazyModule(new TLIMSIC(IMSICParams())(params))
+  val mTLCNode = TLClientNode(
+    Seq(TLMasterPortParameters.v1(
+      Seq(TLMasterParameters.v1("m_tl", IdRange(0, 16)))
+    )))
+  val sgTLCNode = TLClientNode(
+    Seq(TLMasterPortParameters.v1(
+      Seq(TLMasterParameters.v1("sg_tl", IdRange(0, 16)))
+    )))
+  val imsic = LazyModule(new TLIMSIC(IMSICParams()))
+  imsic.mTLNode := mTLCNode
+  imsic.sgTLNode := sgTLCNode
 
   lazy val module = new BackendImp(this)
 }
@@ -698,8 +709,8 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
 //  csrio.fromAIA <> io.fromAIA
   imsic.fromCSR.addr.valid := csrio.toAIA.addr.valid
   imsic.fromCSR.addr.bits := csrio.toAIA.addr.bits.addr
-  imsic.fromCSR.priv := csrio.toAIA.addr.bits.prvm.asUInt
-  imsic.fromCSR.virt := csrio.toAIA.addr.bits.v.asUInt
+  imsic.fromCSR.priv := csrio.toAIA.addr.bits.prvm
+  imsic.fromCSR.virt := csrio.toAIA.addr.bits.v.asUInt.asBool
   imsic.fromCSR.vgein := csrio.toAIA.vgein
   imsic.fromCSR.claims(0) := csrio.toAIA.mClaim
   imsic.fromCSR.claims(1) := csrio.toAIA.sClaim
@@ -908,7 +919,4 @@ class BackendIO(implicit p: Parameters, params: BackendParams) extends XSBundle 
   }
   val debugRolling = new RobDebugRollingIO
 
-  // for aia
-  val toAIA = Output(new CSRToAIABundle)
-  val fromAIA = Flipped(Output(new AIAToCSRBundle))
 }
