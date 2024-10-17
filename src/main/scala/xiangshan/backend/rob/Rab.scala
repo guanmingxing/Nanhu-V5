@@ -120,8 +120,8 @@ class RenameBuffer(size: Int)(implicit p: Parameters) extends XSModule with HasC
 
   val realNeedAlloc = io.req.map(req => req.valid && req.bits.needWriteRf)
   val enqCount    = PopCount(realNeedAlloc)
-  val commitNum = Wire(UInt(log2Up(RabCommitWidth).W))
-  val walkNum = Wire(UInt(log2Up(RabCommitWidth).W))
+  val commitNum = Wire(UInt(log2Up(RabCommitWidth+1).W))
+  val walkNum = Wire(UInt(log2Up(RabCommitWidth+1).W))
   commitNum := Mux(io.commits.commitValid(0), PriorityMux((0 until RabCommitWidth).map(
     i => io.commits.commitValid(RabCommitWidth - 1 - i) -> (RabCommitWidth - i).U
   )), 0.U)
