@@ -255,22 +255,18 @@ class Rename(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHe
     case (move, in) => move := Mux(in.exceptionVec.asUInt.orR, false.B, in.isMove)
   }
 
-  val walkNeedIntDest = WireDefault(VecInit(Seq.fill(RenameWidth)(false.B)))
-  val walkNeedFpDest = WireDefault(VecInit(Seq.fill(RenameWidth)(false.B)))
-  val walkNeedVecDest = WireDefault(VecInit(Seq.fill(RenameWidth)(false.B)))
-  val walkNeedV0Dest = WireDefault(VecInit(Seq.fill(RenameWidth)(false.B)))
-  val walkNeedVlDest = WireDefault(VecInit(Seq.fill(RenameWidth)(false.B)))
-  val walkIsMove = WireDefault(VecInit(Seq.fill(RenameWidth)(false.B)))
+  val walkNeedIntDest = WireDefault(VecInit(Seq.fill(RabCommitWidth)(false.B)))
+  val walkNeedFpDest = WireDefault(VecInit(Seq.fill(RabCommitWidth)(false.B)))
+  val walkNeedVecDest = WireDefault(VecInit(Seq.fill(RabCommitWidth)(false.B)))
+  val walkNeedV0Dest = WireDefault(VecInit(Seq.fill(RabCommitWidth)(false.B)))
+  val walkNeedVlDest = WireDefault(VecInit(Seq.fill(RabCommitWidth)(false.B)))
+  val walkIsMove = WireDefault(VecInit(Seq.fill(RabCommitWidth)(false.B)))
 
   val intSpecWen = Wire(Vec(RenameWidth, Bool()))
   val fpSpecWen  = Wire(Vec(RenameWidth, Bool()))
   val vecSpecWen = Wire(Vec(RenameWidth, Bool()))
   val v0SpecWen = Wire(Vec(RenameWidth, Bool()))
   val vlSpecWen = Wire(Vec(RenameWidth, Bool()))
-
-  val walkIntSpecWen = WireDefault(VecInit(Seq.fill(RenameWidth)(false.B)))
-
-  val walkPdest = Wire(Vec(RenameWidth, UInt(PhyRegIdxWidth.W)))
 
   // uop calculation
   for (i <- 0 until RenameWidth) {
@@ -307,24 +303,12 @@ class Rename(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHe
     needVecDest(i) := io.in(i).valid && needDestReg(Reg_V, io.in(i).bits)
     needFpDest(i) := io.in(i).valid && needDestReg(Reg_F, io.in(i).bits)
     needIntDest(i) := io.in(i).valid && needDestReg(Reg_I, io.in(i).bits)
-    if (i < RabCommitWidth) {
-      walkNeedIntDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_I, io.rabCommits.info(i))
-      walkNeedFpDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_F, io.rabCommits.info(i))
-      walkNeedVecDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_V, io.rabCommits.info(i))
-      walkNeedV0Dest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_V0, io.rabCommits.info(i))
-      walkNeedVlDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_Vl, io.rabCommits.info(i))
-      walkIsMove(i) := io.rabCommits.info(i).isMove
-    }
+
     fpFreeList.io.allocateReq(i) := needFpDest(i)
-    fpFreeList.io.walkReq(i) := walkNeedFpDest(i)
     vecFreeList.io.allocateReq(i) := needVecDest(i)
-    vecFreeList.io.walkReq(i) := walkNeedVecDest(i)
     v0FreeList.io.allocateReq(i) := needV0Dest(i)
-    v0FreeList.io.walkReq(i) := walkNeedV0Dest(i)
     vlFreeList.io.allocateReq(i) := needVlDest(i)
-    vlFreeList.io.walkReq(i) := walkNeedVlDest(i)
     intFreeList.io.allocateReq(i) := needIntDest(i) && !isMove(i)
-    intFreeList.io.walkReq(i) := walkNeedIntDest(i) && !walkIsMove(i)
 
     // no valid instruction from decode stage || all resources (dispatch1 + both free lists) ready
     io.in(i).ready := !io.in(0).valid || canOut
@@ -417,14 +401,22 @@ class Rename(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHe
     vecSpecWen(i) := needVecDest(i) && vecFreeList.io.canAllocate && vecFreeList.io.doAllocate && !io.rabCommits.isWalk && !io.redirect.valid
     v0SpecWen(i) := needV0Dest(i) && v0FreeList.io.canAllocate && v0FreeList.io.doAllocate && !io.rabCommits.isWalk && !io.redirect.valid
     vlSpecWen(i) := needVlDest(i) && vlFreeList.io.canAllocate && vlFreeList.io.doAllocate && !io.rabCommits.isWalk && !io.redirect.valid
+  }
 
+  // Freelist walk
+  for (i <- 0 until RabCommitWidth) {
+    walkNeedIntDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_I, io.rabCommits.info(i))
+    walkNeedFpDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_F, io.rabCommits.info(i))
+    walkNeedVecDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_V, io.rabCommits.info(i))
+    walkNeedV0Dest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_V0, io.rabCommits.info(i))
+    walkNeedVlDest(i) := io.rabCommits.walkValid(i) && needDestRegWalk(Reg_Vl, io.rabCommits.info(i))
+    walkIsMove(i) := io.rabCommits.info(i).isMove
 
-    if (i < RabCommitWidth) {
-      walkIntSpecWen(i) := walkNeedIntDest(i) && !io.redirect.valid
-      walkPdest(i) := io.rabCommits.info(i).pdest
-    } else {
-      walkPdest(i) := io.out(i).bits.pdest
-    }
+    fpFreeList.io.walkReq(i) := walkNeedFpDest(i)
+    vecFreeList.io.walkReq(i) := walkNeedVecDest(i)
+    v0FreeList.io.walkReq(i) := walkNeedV0Dest(i)
+    vlFreeList.io.walkReq(i) := walkNeedVlDest(i)
+    intFreeList.io.walkReq(i) := walkNeedIntDest(i) && !walkIsMove(i)
   }
 
   /**
@@ -581,12 +573,10 @@ class Rename(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHe
   /**
     * Instructions commit: update freelist and rename table
     */
-  for (i <- 0 until RabCommitWidth) {
-    val commitValid = io.rabCommits.isCommit && io.rabCommits.commitValid(i)
-    val walkValid = io.rabCommits.isWalk && io.rabCommits.walkValid(i)
 
-    // I. RAT Update
-    // When redirect happens (mis-prediction), don't update the rename table
+  // I. RAT Update
+  // When redirect happens (mis-prediction), don't update the rename table
+  for (i <- 0 until RenameWidth) {
     io.intRenamePorts(i).wen  := intSpecWen(i)
     io.intRenamePorts(i).addr := uops(i).ldest(log2Ceil(IntLogicRegs) - 1, 0)
     io.intRenamePorts(i).data := io.out(i).bits.pdest
@@ -606,8 +596,12 @@ class Rename(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHe
     io.vlRenamePorts(i).wen := vlSpecWen(i)
     io.vlRenamePorts(i).addr := uops(i).ldest(log2Ceil(VlLogicRegs) - 1, 0)
     io.vlRenamePorts(i).data := vlFreeList.io.allocatePhyReg(i)
+  }
 
-    // II. Free List Update
+  // II. Free List Update
+  for (i <- 0 until RabCommitWidth) {
+    val commitValid = io.rabCommits.isCommit && io.rabCommits.commitValid(i)
+    val walkValid = io.rabCommits.isWalk && io.rabCommits.walkValid(i)
     intFreeList.io.freeReq(i) := io.int_need_free(i)
     intFreeList.io.freePhyReg(i) := RegNext(io.int_old_pdest(i))
     fpFreeList.io.freeReq(i)  := GatedValidRegNext(commitValid && needDestRegCommit(Reg_F, io.rabCommits.info(i)))
