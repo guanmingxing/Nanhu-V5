@@ -19,15 +19,6 @@ class TrapEntryVSEventOutput extends Bundle with EventUpdatePrivStateOutput with
   val vscause  = ValidIO((new CauseBundle   ).addInEvent(_.Interrupt, _.ExceptionCode))
   val vstval   = ValidIO((new OneFieldBundle).addInEvent(_.ALL))
   val targetPc = ValidIO(new TargetPCBundle)
-
-  def getBundleByName(name: String): Valid[CSRBundle] = {
-    name match {
-      case "vsstatus" => this.vsstatus
-      case "vsepc"    => this.vsepc
-      case "vscause"  => this.vscause
-      case "vstval"   => this.vstval
-    }
-  }
 }
 
 class TrapEntryVSEventModule(implicit val p: Parameters) extends Module with CSREventBase {
@@ -72,14 +63,9 @@ class TrapEntryVSEventModule(implicit val p: Parameters) extends Module with CSR
     in.trapPc,
   )
 
-  private val trapMemVA = genTrapVA(
-    dMode,
-    satp,
-    vsatp,
-    hgatp,
-    in.memExceptionVAddr,
-  )
-  private val trapMemGPA = SignExt(in.memExceptionGPAddr, XLEN)
+  private val trapMemVA = in.memExceptionVAddr
+
+  private val trapMemGPA = in.memExceptionGPAddr
 
   private val trapInst = Mux(in.trapInst.valid, in.trapInst.bits, 0.U)
 
@@ -89,18 +75,20 @@ class TrapEntryVSEventModule(implicit val p: Parameters) extends Module with CSR
   private val isFetchExcp    = isException && Seq(/*EX_IAM, */ EX_IAF, EX_IPF).map(_.U === highPrioTrapNO).reduce(_ || _)
   private val isMemExcp      = isException && Seq(EX_LAM, EX_LAF, EX_SAM, EX_SAF, EX_LPF, EX_SPF).map(_.U === highPrioTrapNO).reduce(_ || _)
   private val isBpExcp       = isException && EX_BP.U === highPrioTrapNO
+  private val isFetchBkpt    = isBpExcp && in.isFetchBkpt
+  private val isMemBkpt      = isBpExcp && !in.isFetchBkpt
   private val fetchCrossPage = in.isCrossPageIPF
   private val isFetchMalAddr = in.isFetchMalAddr
   private val isIllegalInst  = isException && (EX_II.U === highPrioTrapNO || EX_VI.U === highPrioTrapNO)
 
   // Software breakpoint exceptions are permitted to write either 0 or the pc to xtval
   // We fill pc here
-  private val tvalFillPc       = isFetchExcp && !fetchCrossPage || isBpExcp
+  private val tvalFillPc       = isFetchExcp && !fetchCrossPage || isFetchBkpt
   private val tvalFillPcPlus2  = isFetchExcp && fetchCrossPage
   private val tvalFillMemVaddr = isMemExcp
   private val tvalFillGVA      =
-    (isFetchExcp || isBpExcp) && fetchIsVirt ||
-    isMemExcp && memIsVirt
+    (isFetchExcp || isFetchBkpt) && fetchIsVirt ||
+    (isMemExcp || isMemBkpt) && memIsVirt
   private val tvalFillInst     = isIllegalInst
 
   private val tval = Mux1H(Seq(
@@ -147,16 +135,10 @@ class TrapEntryVSEventModule(implicit val p: Parameters) extends Module with CSR
   dontTouch(tvalFillGVA)
 }
 
-trait TrapEntryVSEventSinkBundle { self: CSRModule[_] =>
+trait TrapEntryVSEventSinkBundle extends EventSinkBundle { self: CSRModule[_ <: CSRBundle] =>
   val trapToVS = IO(Flipped(new TrapEntryVSEventOutput))
 
-  private val updateBundle: ValidIO[CSRBundle] = trapToVS.getBundleByName(self.modName.toLowerCase())
+  addUpdateBundleInCSREnumType(trapToVS.getBundleByName(self.modName.toLowerCase()))
 
-  (reg.asInstanceOf[CSRBundle].getFields zip updateBundle.bits.getFields).foreach { case (sink, source) =>
-    if (updateBundle.bits.eventFields.contains(source)) {
-      when(updateBundle.valid) {
-        sink := source
-      }
-    }
-  }
+  reconnectReg()
 }

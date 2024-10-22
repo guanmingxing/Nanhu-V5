@@ -262,7 +262,7 @@ class XiangShan(object):
         if self.args.numa:
             numa_info = get_free_cores(self.args.threads)
             numa_args = f"numactl -m {numa_info[0]} -C {numa_info[1]}-{numa_info[2]}"
-        fork_args = "--enable-fork" if self.args.fork else ""
+        fork_args = "--enable-fork -X 10" if self.args.fork else ""
         diff_args = "--no-diff" if self.args.disable_diff else ""
         chiseldb_args = "--dump-db" if not self.args.disable_db else ""
         gcpt_restore_args = f"-r {self.args.gcpt_restore_bin}" if len(self.args.gcpt_restore_bin) != 0 else ""
@@ -427,7 +427,6 @@ class XiangShan(object):
             "linux-hello-smp-opensbi": "fw_payload.bin",
             "linux-hello-new": "bbl.bin",
             "linux-hello-smp-new": "bbl.bin",
-            "linux-hello-smp-newcsr": "bbl.bin",
             "povray": "_700480000000_.gz",
             "mcf": "_17520000000_.gz",
             "xalancbmk": "_266100000000_.gz",
@@ -478,6 +477,7 @@ class XiangShan(object):
             "rvh-tests": self.__get_ci_rvhtest,
             "microbench": self.__am_apps_path,
             "coremark": self.__am_apps_path,
+            "coremark-1-iteration": self.__am_apps_path,
             "rvv-bench": self.__get_ci_rvvbench,
             "rvv-test": self.__get_ci_rvvtest
         }
@@ -504,6 +504,7 @@ class XiangShan(object):
             "rvh-tests": self.__get_ci_rvhtest,
             "microbench": self.__am_apps_path,
             "coremark": self.__am_apps_path,
+            "coremark-1-iteration": self.__am_apps_path,
             "rvv-bench": self.__get_ci_rvvbench,
             "rvv-test": self.__get_ci_rvvtest
         }
@@ -542,6 +543,7 @@ def get_free_cores(n):
             if sum(window_usage) < 30 * n and True not in map(lambda x: x > 90, window_usage):
                 return (((i * n) % num_logical_core) // (num_logical_core // 2), i * n, i * n + n - 1)
         print(f"No free {n} cores found. CPU usage: {core_usage}\n")
+        time.sleep(random.uniform(1, 60))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Python wrapper for XiangShan')

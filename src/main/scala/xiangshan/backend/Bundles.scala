@@ -40,17 +40,18 @@ object Bundles {
   }
   // frontend -> backend
   class StaticInst(implicit p: Parameters) extends XSBundle {
-    val instr           = UInt(32.W)
-    val pc              = UInt(VAddrBits.W)
-    val foldpc          = UInt(MemPredPCWidth.W)
-    val exceptionVec    = ExceptionVec()
-    val isFetchMalAddr  = Bool()
-    val trigger         = TriggerAction()
-    val preDecodeInfo   = new PreDecodeInfo
-    val pred_taken      = Bool()
-    val crossPageIPFFix = Bool()
-    val ftqPtr          = new FtqPtr
-    val ftqOffset       = UInt(log2Up(PredictWidth).W)
+    val instr            = UInt(32.W)
+    val pc               = UInt(VAddrBits.W)
+    val foldpc           = UInt(MemPredPCWidth.W)
+    val exceptionVec     = ExceptionVec()
+    val isFetchMalAddr   = Bool()
+    val trigger          = TriggerAction()
+    val preDecodeInfo    = new PreDecodeInfo
+    val pred_taken       = Bool()
+    val crossPageIPFFix  = Bool()
+    val ftqPtr           = new FtqPtr
+    val ftqOffset        = UInt(log2Up(PredictWidth).W)
+    val isLastInFtqEntry = Bool()
 
     def connectCtrlFlow(source: CtrlFlow): Unit = {
       this.instr            := source.instr
@@ -64,6 +65,7 @@ object Bundles {
       this.crossPageIPFFix  := source.crossPageIPFFix
       this.ftqPtr           := source.ftqPtr
       this.ftqOffset        := source.ftqOffset
+      this.isLastInFtqEntry := source.isLastInFtqEntry
     }
   }
 
@@ -443,6 +445,8 @@ object Bundles {
     val isDependOldvd = Bool() // some instruction's computation depends on oldvd
     val isWritePartVd = Bool() // some instruction's computation writes part of vd, such as vredsum
 
+    val isVleff = Bool() // vleff
+
     def vtype: VType = {
       val res = Wire(VType())
       res.illegal := this.vill
@@ -726,6 +730,10 @@ object Bundles {
       val vdIdxInField = UInt(3.W)
       val isIndexed = Bool()
       val isMasked = Bool()
+      val isStrided = Bool()
+      val isWhole = Bool()
+      val isVecLoad = Bool()
+      val isVlm = Bool()
     })
     val debug = new DebugBundle
     val debugInfo = new PerfDebugInfo
@@ -854,14 +862,16 @@ object Bundles {
     val instr = UInt(32.W)
     val commitType = CommitType()
     val exceptionVec = ExceptionVec()
+    val isFetchBkpt = Bool()
     val isFetchMalAddr = Bool()
-    val gpaddr = UInt(GPAddrBits.W)
+    val gpaddr = UInt(XLEN.W)
     val singleStep = Bool()
     val crossPageIPFFix = Bool()
     val isInterrupt = Bool()
     val isHls = Bool()
     val vls = Bool()
     val trigger = TriggerAction()
+    val isForVSnonLeafPTE = Bool()
   }
 
   object UopIdx {
@@ -919,6 +929,7 @@ object Bundles {
     val mask = if (isVector) Some(UInt(VLEN.W)) else None
     val vdIdx = if (isVector) Some(UInt(3.W)) else None // TODO: parameterize width
     val vdIdxInField = if (isVector) Some(UInt(3.W)) else None
+    val isFromLoadUnit = Bool()
     val debug = new DebugBundle
 
     def isVls = FuType.isVls(uop.fuType)

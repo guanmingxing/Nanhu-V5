@@ -24,7 +24,6 @@ import freechips.rocketchip.diplomacy.{IdRange, LazyModule, LazyModuleImp}
 import freechips.rocketchip.tilelink.{TLClientNode, TLMasterParameters, TLMasterPortParameters}
 import system.HasSoCParameter
 import utility._
-import utils.{HPerfMonitor, HasPerfEvents, PerfEvent}
 import xiangshan._
 import xiangshan.backend.Bundles.{DynInst, IssueQueueIQWakeUpBundle, LoadShouldCancel, MemExuInput, MemExuOutput, VPUCtrlSignals}
 import xiangshan.backend.ctrlblock.{DebugLSIO, LsTopdownInfo}
@@ -48,8 +47,23 @@ import scala.collection.mutable
 
 class Backend(val params: BackendParams)(implicit p: Parameters) extends LazyModule
   with HasXSParameter {
-
   override def shouldBeInlined: Boolean = false
+  val inner = LazyModule(new BackendInlined(params))
+  lazy val module = new BackendImp(this)
+}
+
+class BackendImp(wrapper: Backend)(implicit p: Parameters) extends LazyModuleImp(wrapper) {
+  val io = IO(new BackendIO()(p, wrapper.params))
+  io <> wrapper.inner.module.io
+  if (p(DebugOptionsKey).ResetGen) {
+    ResetGen(ResetGenNode(Seq(ModuleNode(wrapper.inner.module))), reset, sim = false)
+  }
+}
+
+class BackendInlined(val params: BackendParams)(implicit p: Parameters) extends LazyModule
+  with HasXSParameter {
+
+  override def shouldBeInlined: Boolean = true
 
   // check read & write port config
   params.configChecks
@@ -165,6 +179,7 @@ class Backend(val params: BackendParams)(implicit p: Parameters) extends LazyMod
   val fpExuBlock = params.fpSchdParams.map(x => LazyModule(new ExuBlock(x)))
   val vfExuBlock = params.vfSchdParams.map(x => LazyModule(new ExuBlock(x)))
   val wbFuBusyTable = LazyModule(new WbFuBusyTable(params))
+  
   val mTLCNode = TLClientNode(
     Seq(TLMasterPortParameters.v1(
       Seq(TLMasterParameters.v1("m_tl", IdRange(0, 16)))
@@ -180,7 +195,7 @@ class Backend(val params: BackendParams)(implicit p: Parameters) extends LazyMod
   lazy val module = new BackendImp(this)
 }
 
-class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends LazyModuleImp(wrapper)
+class BackendInlinedImp(override val wrapper: BackendInlined)(implicit p: Parameters) extends LazyModuleImp(wrapper)
   with HasXSParameter
   with HasPerfEvents {
   implicit private val params: BackendParams = wrapper.params
@@ -201,6 +216,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   private val bypassNetwork = Module(new BypassNetwork)
   private val wbDataPath = Module(new WbDataPath(params))
   private val wbFuBusyTable = wrapper.wbFuBusyTable.module
+  private val vecExcpMod = Module(new VecExcpDataMergeModule)
   private val imsic = wrapper.imsic.module
 
   private val iqWakeUpMappedBundle: Map[Int, ValidIO[IssueQueueIQWakeUpBundle]] = (
@@ -224,8 +240,10 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
 
   private val og1Cancel = dataPath.io.og1Cancel
   private val og0Cancel = dataPath.io.og0Cancel
-  private val vlIsZero = intExuBlock.io.vlIsZero.get
-  private val vlIsVlmax = intExuBlock.io.vlIsVlmax.get
+  private val vlFromIntIsZero = intExuBlock.io.vlIsZero.get
+  private val vlFromIntIsVlmax = intExuBlock.io.vlIsVlmax.get
+  private val vlFromVfIsZero = vfExuBlock.io.vlIsZero.get
+  private val vlFromVfIsVlmax = vfExuBlock.io.vlIsVlmax.get
 
   ctrlBlock.io.intIQValidNumVec := intScheduler.io.intIQValidNumVec
   ctrlBlock.io.fpIQValidNumVec := fpScheduler.io.fpIQValidNumVec
@@ -249,6 +267,8 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   ctrlBlock.io.debugEnqLsq.resp := io.mem.lsqEnqIO.resp
   ctrlBlock.io.debugEnqLsq.req := memScheduler.io.memIO.get.lsqEnqIO.req
   ctrlBlock.io.debugEnqLsq.needAlloc := memScheduler.io.memIO.get.lsqEnqIO.needAlloc
+  ctrlBlock.io.debugEnqLsq.iqAccept := memScheduler.io.memIO.get.lsqEnqIO.iqAccept
+  ctrlBlock.io.fromVecExcpMod.busy := vecExcpMod.o.status.busy
 
   intScheduler.io.fromTop.hartId := io.fromTop.hartId
   intScheduler.io.fromCtrlBlock.flush := ctrlBlock.io.toIssueBlock.flush
@@ -265,8 +285,10 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   intScheduler.io.fromDataPath.og1Cancel := og1Cancel
   intScheduler.io.ldCancel := io.mem.ldCancel
   intScheduler.io.fromDataPath.replaceRCIdx.get := dataPath.io.toWakeupQueueRCIdx.take(params.getIntExuRCWriteSize)
-  intScheduler.io.vlWriteBackInfo.vlIsZero := false.B
-  intScheduler.io.vlWriteBackInfo.vlIsVlmax := false.B
+  intScheduler.io.vlWriteBackInfo.vlFromIntIsZero := false.B
+  intScheduler.io.vlWriteBackInfo.vlFromIntIsVlmax := false.B
+  intScheduler.io.vlWriteBackInfo.vlFromVfIsZero := false.B
+  intScheduler.io.vlWriteBackInfo.vlFromVfIsVlmax := false.B
 
   fpScheduler.io.fromTop.hartId := io.fromTop.hartId
   fpScheduler.io.fromCtrlBlock.flush := ctrlBlock.io.toIssueBlock.flush
@@ -282,8 +304,10 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   fpScheduler.io.fromDataPath.og0Cancel := og0Cancel
   fpScheduler.io.fromDataPath.og1Cancel := og1Cancel
   fpScheduler.io.ldCancel := io.mem.ldCancel
-  fpScheduler.io.vlWriteBackInfo.vlIsZero := false.B
-  fpScheduler.io.vlWriteBackInfo.vlIsVlmax := false.B
+  fpScheduler.io.vlWriteBackInfo.vlFromIntIsZero := false.B
+  fpScheduler.io.vlWriteBackInfo.vlFromIntIsVlmax := false.B
+  fpScheduler.io.vlWriteBackInfo.vlFromVfIsZero := false.B
+  fpScheduler.io.vlWriteBackInfo.vlFromVfIsVlmax := false.B
 
   memScheduler.io.fromTop.hartId := io.fromTop.hartId
   memScheduler.io.fromCtrlBlock.flush := ctrlBlock.io.toIssueBlock.flush
@@ -319,8 +343,10 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   memScheduler.io.fromDataPath.og1Cancel := og1Cancel
   memScheduler.io.ldCancel := io.mem.ldCancel
   memScheduler.io.fromDataPath.replaceRCIdx.get := dataPath.io.toWakeupQueueRCIdx.takeRight(params.getMemExuRCWriteSize)
-  memScheduler.io.vlWriteBackInfo.vlIsZero := vlIsZero
-  memScheduler.io.vlWriteBackInfo.vlIsVlmax := vlIsVlmax
+  memScheduler.io.vlWriteBackInfo.vlFromIntIsZero := vlFromIntIsZero
+  memScheduler.io.vlWriteBackInfo.vlFromIntIsVlmax := vlFromIntIsVlmax
+  memScheduler.io.vlWriteBackInfo.vlFromVfIsZero := vlFromVfIsZero
+  memScheduler.io.vlWriteBackInfo.vlFromVfIsVlmax := vlFromVfIsVlmax
   memScheduler.io.fromOg2Resp.get := og2ForVector.io.toMemIQOg2Resp
 
   vfScheduler.io.fromTop.hartId := io.fromTop.hartId
@@ -337,8 +363,10 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   vfScheduler.io.fromDataPath.og0Cancel := og0Cancel
   vfScheduler.io.fromDataPath.og1Cancel := og1Cancel
   vfScheduler.io.ldCancel := io.mem.ldCancel
-  vfScheduler.io.vlWriteBackInfo.vlIsZero := vlIsZero
-  vfScheduler.io.vlWriteBackInfo.vlIsVlmax := vlIsVlmax
+  vfScheduler.io.vlWriteBackInfo.vlFromIntIsZero := vlFromIntIsZero
+  vfScheduler.io.vlWriteBackInfo.vlFromIntIsVlmax := vlFromIntIsVlmax
+  vfScheduler.io.vlWriteBackInfo.vlFromVfIsZero := vlFromVfIsZero
+  vfScheduler.io.vlWriteBackInfo.vlFromVfIsVlmax := vlFromVfIsVlmax
   vfScheduler.io.fromOg2Resp.get := og2ForVector.io.toVfIQOg2Resp
 
   dataPath.io.hartId := io.fromTop.hartId
@@ -358,12 +386,14 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   dataPath.io.fromVfWb := wbDataPath.io.toVfPreg
   dataPath.io.fromV0Wb := wbDataPath.io.toV0Preg
   dataPath.io.fromVlWb := wbDataPath.io.toVlPreg
-  dataPath.io.debugIntRat    .foreach(_ := ctrlBlock.io.debug_int_rat.get)
-  dataPath.io.debugFpRat     .foreach(_ := ctrlBlock.io.debug_fp_rat.get)
-  dataPath.io.debugVecRat    .foreach(_ := ctrlBlock.io.debug_vec_rat.get)
-  dataPath.io.debugV0Rat     .foreach(_ := ctrlBlock.io.debug_v0_rat.get)
-  dataPath.io.debugVlRat     .foreach(_ := ctrlBlock.io.debug_vl_rat.get)
+  dataPath.io.diffIntRat.foreach(_ := ctrlBlock.io.diff_int_rat.get)
+  dataPath.io.diffFpRat .foreach(_ := ctrlBlock.io.diff_fp_rat.get)
+  dataPath.io.diffVecRat.foreach(_ := ctrlBlock.io.diff_vec_rat.get)
+  dataPath.io.diffV0Rat .foreach(_ := ctrlBlock.io.diff_v0_rat.get)
+  dataPath.io.diffVlRat .foreach(_ := ctrlBlock.io.diff_vl_rat.get)
   dataPath.io.fromBypassNetwork := bypassNetwork.io.toDataPath
+  dataPath.io.fromVecExcpMod.r := vecExcpMod.o.toVPRF.r
+  dataPath.io.fromVecExcpMod.w := vecExcpMod.o.toVPRF.w
 
   og2ForVector.io.flush := ctrlBlock.io.toDataPath.flush
   og2ForVector.io.ldCancel := io.mem.ldCancel
@@ -404,7 +434,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   )
   bypassNetwork.io.fromExus.mem.flatten.zip(io.mem.writeBack).foreach { case (sink, source) =>
     sink.valid := source.valid
-    sink.bits.intWen := source.bits.uop.rfWen && FuType.isLoad(source.bits.uop.fuType)
+    sink.bits.intWen := source.bits.uop.rfWen && source.bits.isFromLoadUnit
     sink.bits.pdest := source.bits.uop.pdest
     sink.bits.data := source.bits.data
   }
@@ -436,6 +466,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   csrin.clintTime.valid := RegNext(io.fromTop.clintTime.valid)
   csrin.clintTime.bits := RegEnable(io.fromTop.clintTime.bits, io.fromTop.clintTime.valid)
   csrin.trapInstInfo := ctrlBlock.io.toCSR.trapInstInfo
+  csrin.fromVecExcpMod.busy := vecExcpMod.o.status.busy
 
   private val csrio = intExuBlock.io.csrio.get
   csrio.hartId := io.fromTop.hartId
@@ -457,7 +488,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   // csr not store the value of vl, so when using difftest we assign the value of vl to debugVl
   val debugVl_s0 = WireInit(UInt(VlData().dataWidth.W), 0.U)
   val debugVl_s1 = WireInit(UInt(VlData().dataWidth.W), 0.U)
-  debugVl_s0 := dataPath.io.debugVl.getOrElse(0.U.asTypeOf(UInt(VlData().dataWidth.W)))
+  debugVl_s0 := dataPath.io.diffVl.getOrElse(0.U.asTypeOf(UInt(VlData().dataWidth.W)))
   debugVl_s1 := RegNext(debugVl_s0)
   csrio.vpu.set_vxsat := ctrlBlock.io.robio.csr.vxsat
   csrio.vpu.set_vstart.valid := ctrlBlock.io.robio.csr.vstart.valid
@@ -472,6 +503,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   csrio.robDeqPtr := ctrlBlock.io.robio.robDeqPtr
   csrio.memExceptionVAddr := io.mem.exceptionAddr.vaddr
   csrio.memExceptionGPAddr := io.mem.exceptionAddr.gpaddr
+  csrio.memExceptionIsForVSnonLeafPTE := io.mem.exceptionAddr.isForVSnonLeafPTE
   csrio.externalInterrupt := RegNext(io.fromTop.externalInterrupt)
   csrio.perf <> io.perf
   csrio.perf.retiredInstr <> ctrlBlock.io.robio.csr.perfinfo.retiredInstr
@@ -550,9 +582,19 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
       x.oldVdPsrc := source.bits.uop.psrc(2)
       x.isIndexed := VlduType.isIndexed(source.bits.uop.fuOpType)
       x.isMasked := VlduType.isMasked(source.bits.uop.fuOpType)
+      x.isStrided := VlduType.isStrided(source.bits.uop.fuOpType)
+      x.isWhole := VlduType.isWhole(source.bits.uop.fuOpType)
+      x.isVecLoad := VlduType.isVecLd(source.bits.uop.fuOpType)
+      x.isVlm := VlduType.isMasked(source.bits.uop.fuOpType) && VlduType.isVecLd(source.bits.uop.fuOpType)
     })
     sink.bits.trigger.foreach(_ := source.bits.uop.trigger)
   }
+  wbDataPath.io.fromCSR.vstart := csrio.vpu.vstart
+
+  vecExcpMod.i.fromExceptionGen := ctrlBlock.io.toVecExcpMod.excpInfo
+  vecExcpMod.i.fromRab.logicPhyRegMap := ctrlBlock.io.toVecExcpMod.logicPhyRegMap
+  vecExcpMod.i.fromRat := ctrlBlock.io.toVecExcpMod.ratOldPest
+  vecExcpMod.i.fromVprf := dataPath.io.toVecExcpMod
 
   // to mem
   private val memIssueParams = params.memSchdParams.get.issueBlockParams
@@ -565,8 +607,9 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
   for (i <- toMem.indices) {
     for (j <- toMem(i).indices) {
       val shouldLdCancel = LoadShouldCancel(bypassNetwork.io.toExus.mem(i)(j).bits.loadDependency, io.mem.ldCancel)
+      val needIssueTimeout = memExuBlocksHasLDU(i)(j) || memExuBlocksHasVecLoad(i)(j)
       val issueTimeout =
-        if (memExuBlocksHasLDU(i)(j))
+        if (needIssueTimeout)
           Counter(0 until 16, toMem(i)(j).valid && !toMem(i)(j).fire, bypassNetwork.io.toExus.mem(i)(j).fire)._2
         else
           false.B
@@ -579,6 +622,16 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
         memScheduler.io.loadFinalIssueResp(i)(j).bits.uopIdx.foreach(_ := toMem(i)(j).bits.vpu.get.vuopIdx)
         memScheduler.io.loadFinalIssueResp(i)(j).bits.sqIdx.foreach(_ := toMem(i)(j).bits.sqIdx.get)
         memScheduler.io.loadFinalIssueResp(i)(j).bits.lqIdx.foreach(_ := toMem(i)(j).bits.lqIdx.get)
+      }
+
+      if (memScheduler.io.vecLoadFinalIssueResp(i).nonEmpty && memExuBlocksHasVecLoad(i)(j)) {
+        memScheduler.io.vecLoadFinalIssueResp(i)(j).valid := issueTimeout
+        memScheduler.io.vecLoadFinalIssueResp(i)(j).bits.fuType := toMem(i)(j).bits.fuType
+        memScheduler.io.vecLoadFinalIssueResp(i)(j).bits.resp := RespType.block
+        memScheduler.io.vecLoadFinalIssueResp(i)(j).bits.robIdx := toMem(i)(j).bits.robIdx
+        memScheduler.io.vecLoadFinalIssueResp(i)(j).bits.uopIdx.foreach(_ := toMem(i)(j).bits.vpu.get.vuopIdx)
+        memScheduler.io.vecLoadFinalIssueResp(i)(j).bits.sqIdx.foreach(_ := toMem(i)(j).bits.sqIdx.get)
+        memScheduler.io.vecLoadFinalIssueResp(i)(j).bits.lqIdx.foreach(_ := toMem(i)(j).bits.lqIdx.get)
       }
 
       NewPipelineConnect(
@@ -698,7 +751,7 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
 
   io.csrCustomCtrl := csrio.customCtrl
 
-  io.toTop.cpuHalted := false.B // TODO: implement cpu halt
+  io.toTop.cpuHalted := ctrlBlock.io.toTop.cpuHalt
 
   io.debugTopDown.fromRob := ctrlBlock.io.debugTopDown.fromRob
   ctrlBlock.io.debugTopDown.fromCore := io.debugTopDown.fromCore
@@ -755,9 +808,9 @@ class BackendImp(override val wrapper: Backend)(implicit p: Parameters) extends 
       ModuleNode(wbFuBusyTable),
       ResetGenNode(Seq(
         ModuleNode(ctrlBlock),
-        ResetGenNode(Seq(
+        // ResetGenNode(Seq(
           CellNode(io.frontendReset)
-        ))
+        // ))
       ))
     ))
     ResetGen(leftResetTree, reset, sim = false)
@@ -824,8 +877,9 @@ class BackendMemIO(implicit p: Parameters, params: BackendParams) extends XSBund
   val stIn = Input(Vec(params.StaExuCnt, ValidIO(new DynInst())))
   val memoryViolation = Flipped(ValidIO(new Redirect))
   val exceptionAddr = Input(new Bundle {
-    val vaddr = UInt(VAddrBits.W)
-    val gpaddr = UInt(GPAddrBits.W)
+    val vaddr = UInt(XLEN.W)
+    val gpaddr = UInt(XLEN.W)
+    val isForVSnonLeafPTE = Bool()
   })
   val sqDeq = Input(UInt(log2Ceil(EnsbufferWidth + 1).W))
   val lqDeq = Input(UInt(log2Up(CommitWidth + 1).W))

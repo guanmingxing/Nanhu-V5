@@ -93,8 +93,10 @@ class StoreMisalignBuffer(implicit p: Parameters) extends XSModule
     val writeBack       = Decoupled(new MemExuOutput)
     val overwriteExpBuf = Output(new XSBundle {
       val valid = Bool()
-      val vaddr = UInt(VAddrBits.W)
-      val gpaddr = UInt(GPAddrBits.W)
+      val vaddr = UInt(XLEN.W)
+      val isHyper = Bool()
+      val gpaddr = UInt(XLEN.W)
+      val isForVSnonLeafPTE = Bool()
     })
     val sqControl       = new StoreMaBufToSqControlIO
   })
@@ -441,6 +443,10 @@ class StoreMisalignBuffer(implicit p: Parameters) extends XSModule
 
   io.splitStoreReq.valid := req_valid && (bufferState === s_req)
   io.splitStoreReq.bits  := splitStoreReqs(curPtr)
+  // Restore the information of H extension store
+  // bit encoding: | hsv 1 | store 00 | size(2bit) |
+  val reqIsHsv  = LSUOpType.isHsv(req.uop.fuOpType)
+  io.splitStoreReq.bits.uop.fuOpType := Cat(reqIsHsv, 0.U(2.W), splitStoreReqs(curPtr).uop.fuOpType(1, 0))
 
   when (io.splitStoreResp.valid) {
     splitStoreResp(curPtr) := io.splitStoreResp.bits
@@ -569,6 +575,7 @@ class StoreMisalignBuffer(implicit p: Parameters) extends XSModule
   io.writeBack.bits.uop.flushPipe := Mux(globalMMIO || globalException, false.B, true.B)
   io.writeBack.bits.uop.replayInst := false.B
   io.writeBack.bits.data := unalignedStoreData
+  io.writeBack.bits.isFromLoadUnit := DontCare
   io.writeBack.bits.debug.isMMIO := globalMMIO
   io.writeBack.bits.debug.isPerfCnt := false.B
   io.writeBack.bits.debug.paddr := req.paddr
@@ -591,12 +598,16 @@ class StoreMisalignBuffer(implicit p: Parameters) extends XSModule
   // NOTE: spectial case (unaligned store cross page, page fault happens in next page)
   // if exception happens in the higher page address part, overwrite the storeExceptionBuffer vaddr
   val overwriteExpBuf = GatedValidRegNext(req_valid && cross16BytesBoundary && globalException && (curPtr === 1.U))
-  val overwriteAddr = GatedRegNext(splitStoreResp(curPtr).vaddr)
+  val overwriteVaddr = GatedRegNext(splitStoreResp(curPtr).vaddr)
+  val overwriteIsHyper = GatedRegNext(splitStoreResp(curPtr).isHyper)
   val overwriteGpaddr = GatedRegNext(splitStoreResp(curPtr).gpaddr)
+  val overwriteIsForVSnonLeafPTE = GatedRegNext(splitStoreResp(curPtr).isForVSnonLeafPTE)
 
   io.overwriteExpBuf.valid := overwriteExpBuf
-  io.overwriteExpBuf.vaddr := overwriteAddr
+  io.overwriteExpBuf.vaddr := overwriteVaddr
+  io.overwriteExpBuf.isHyper := overwriteIsHyper
   io.overwriteExpBuf.gpaddr := overwriteGpaddr
+  io.overwriteExpBuf.isForVSnonLeafPTE := overwriteIsForVSnonLeafPTE
 
   XSPerfAccumulate("alloc",                  RegNext(!req_valid) && req_valid)
   XSPerfAccumulate("flush",                  flush)

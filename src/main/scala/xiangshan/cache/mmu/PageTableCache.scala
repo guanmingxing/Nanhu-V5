@@ -68,12 +68,10 @@ class PageCacheMergePespBundle(implicit p: Parameters) extends PtwBundle {
   val ecc = Bool()
   val level = UInt(2.W)
   val v = Vec(tlbcontiguous, Bool())
-  val af = Vec(tlbcontiguous, Bool())
 
   def apply(hit: Bool, pre: Bool, ppn: Vec[UInt], pbmt: Vec[UInt] = Vec(tlbcontiguous, 0.U),
             perm: Vec[PtePermBundle] = Vec(tlbcontiguous, 0.U.asTypeOf(new PtePermBundle())),
-            ecc: Bool = false.B, level: UInt = 0.U, valid: Vec[Bool] = Vec(tlbcontiguous, true.B),
-            accessFault: Vec[Bool] = Vec(tlbcontiguous, true.B)): Unit = {
+            ecc: Bool = false.B, level: UInt = 0.U, valid: Vec[Bool] = Vec(tlbcontiguous, true.B)): Unit = {
     this.hit := hit && !ecc
     this.pre := pre
     this.ppn := ppn
@@ -82,7 +80,6 @@ class PageCacheMergePespBundle(implicit p: Parameters) extends PtwBundle {
     this.ecc := ecc && hit
     this.level := level
     this.v := valid
-    this.af := accessFault
   }
 }
 
@@ -499,8 +496,7 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
   val l0HitPPN = l0HitData.ppns
   val l0HitPbmt = l0HitData.pbmts
   val l0HitPerm = l0HitData.perms.getOrElse(0.U.asTypeOf(Vec(PtwL0SectorSize, new PtePermBundle)))
-  val l0HitValid = l0HitData.vs
-  val l0HitAf = l0HitData.af
+  val l0HitValid = VecInit(l0HitData.onlypf.map(!_))
 
   // super page
   val spreplace = ReplacementPolicy.fromString(l2tlbParams.spReplacer, l2tlbParams.spSize)
@@ -533,7 +529,7 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
   check_res.l3.map(_.apply(l3Hit.get, l3Pre.get, l3HitPPN.get))
   check_res.l2.apply(l2Hit, l2Pre, l2HitPPN, l2HitPbmt)
   check_res.l1.apply(l1Hit, l1Pre, l1HitPPN, l1HitPbmt, ecc = l1eccError)
-  check_res.l0.apply(l0Hit, l0Pre, l0HitPPN, l0HitPbmt, l0HitPerm, l0eccError, valid = l0HitValid, accessFault = l0HitAf)
+  check_res.l0.apply(l0Hit, l0Pre, l0HitPPN, l0HitPbmt, l0HitPerm, l0eccError, valid = l0HitValid)
   check_res.sp.apply(spHit, spPre, spHitData.ppn, spHitData.pbmt, spHitPerm, false.B, spHitLevel, spValid)
 
   val resp_res = Reg(new PageCacheRespBundle)
@@ -564,9 +560,9 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
   io.resp.bits.isFirst  := stageResp.bits.isFirst
   io.resp.bits.hit      := (resp_res.l0.hit || resp_res.sp.hit) && (!isAllStage || isAllStage && stage1Pf)
   if (EnableSv48) {
-    io.resp.bits.bypassed := (bypassed(0) || (bypassed(1) && !resp_res.l1.hit) || (bypassed(2) && !resp_res.l2.hit) || (bypassed(3) && !resp_res.l3.get.hit)) && !isAllStage
+    io.resp.bits.bypassed := ((bypassed(0) && !resp_res.l0.hit) || (bypassed(1) && !resp_res.l1.hit) || (bypassed(2) && !resp_res.l2.hit) || (bypassed(3) && !resp_res.l3.get.hit)) && !isAllStage
   } else {
-    io.resp.bits.bypassed := (bypassed(0) || (bypassed(1) && !resp_res.l1.hit) || (bypassed(2) && !resp_res.l2.hit)) && !isAllStage
+    io.resp.bits.bypassed := ((bypassed(0) && !resp_res.l0.hit) || (bypassed(1) && !resp_res.l1.hit) || (bypassed(2) && !resp_res.l2.hit)) && !isAllStage
   }
   io.resp.bits.prefetch := resp_res.l0.pre && resp_res.l0.hit || resp_res.sp.pre && resp_res.sp.hit
   io.resp.bits.toFsm.l3Hit.map(_ := resp_res.l3.get.hit && !stage1Hit && !isOnlyStage2 && !stageResp.bits.isHptwReq)
@@ -577,9 +573,9 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
 
   io.resp.bits.isHptwReq := stageResp.bits.isHptwReq
   if (EnableSv48) {
-    io.resp.bits.toHptw.bypassed := (hptw_bypassed(0) || (hptw_bypassed(1) && !resp_res.l1.hit) || (hptw_bypassed(2) && !resp_res.l2.hit) || (hptw_bypassed(3) && !resp_res.l3.get.hit)) && stageResp.bits.isHptwReq
+    io.resp.bits.toHptw.bypassed := ((hptw_bypassed(0) && !resp_res.l0.hit) || (hptw_bypassed(1) && !resp_res.l1.hit) || (hptw_bypassed(2) && !resp_res.l2.hit) || (hptw_bypassed(3) && !resp_res.l3.get.hit)) && stageResp.bits.isHptwReq
   } else {
-    io.resp.bits.toHptw.bypassed := (hptw_bypassed(0) || (hptw_bypassed(1) && !resp_res.l1.hit) || (hptw_bypassed(2) && !resp_res.l2.hit)) && stageResp.bits.isHptwReq
+    io.resp.bits.toHptw.bypassed := ((hptw_bypassed(0) && !resp_res.l0.hit) || (hptw_bypassed(1) && !resp_res.l1.hit) || (hptw_bypassed(2) && !resp_res.l2.hit)) && stageResp.bits.isHptwReq
   }
   io.resp.bits.toHptw.id := stageResp.bits.hptwId
   io.resp.bits.toHptw.l3Hit.map(_ := resp_res.l3.get.hit && stageResp.bits.isHptwReq)
@@ -596,7 +592,7 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
   io.resp.bits.toHptw.resp.entry.perm.map(_ := Mux(resp_res.l0.hit, resp_res.l0.perm(idx), resp_res.sp.perm))
   io.resp.bits.toHptw.resp.entry.v := Mux(resp_res.l0.hit, resp_res.l0.v(idx), resp_res.sp.v)
   io.resp.bits.toHptw.resp.gpf := !io.resp.bits.toHptw.resp.entry.v
-  io.resp.bits.toHptw.resp.gaf := Mux(resp_res.l0.hit, resp_res.l0.af(idx), false.B)
+  io.resp.bits.toHptw.resp.gaf := false.B
 
   io.resp.bits.stage1.entry.map(_.tag := stageResp.bits.req_info.vpn(vpnLen - 1, 3))
   io.resp.bits.stage1.entry.map(_.asid := Mux(stageResp.bits.req_info.hasS2xlate(), io.csr_dup(0).vsatp.asid, io.csr_dup(0).satp.asid)) // DontCare
@@ -649,13 +645,13 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
           resp_res.l2.pbmt)))
     io.resp.bits.stage1.entry(i).perm.map(_ := Mux(resp_res.l0.hit, resp_res.l0.perm(i),  Mux(resp_res.sp.hit, resp_res.sp.perm, 0.U.asTypeOf(new PtePermBundle))))
     io.resp.bits.stage1.entry(i).pf := !io.resp.bits.stage1.entry(i).v
-    io.resp.bits.stage1.entry(i).af := Mux(resp_res.l0.hit, resp_res.l0.af(i), false.B)
+    io.resp.bits.stage1.entry(i).af := false.B
   }
   io.resp.bits.stage1.pteidx := UIntToOH(idx).asBools
   io.resp.bits.stage1.not_super := Mux(resp_res.l0.hit, true.B, false.B)
+  io.resp.bits.stage1.not_merge := false.B
   io.resp.valid := stageResp.valid
   XSError(stageResp.valid && resp_res.l0.hit && resp_res.sp.hit, "normal page and super page both hit")
-  XSError(stageResp.valid && io.resp.bits.hit && bypassed(0), "page cache, bypassed but hit")
 
   // refill Perf
   val l3RefillPerf = if (EnableSv48) Some(Wire(Vec(l2tlbParams.l3Size, Bool()))) else None
@@ -686,11 +682,10 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
   // TODO: handle sfenceLatch outsize
   if (EnableSv48) {
     when (
-      !flush_dup(2) && refill.levelOH.l3.get && !memPte(2).isLeaf() && !memPte(2).isPf(refill.level_dup(2), pbmte) &&
-      Mux(refill.req_info_dup(2).s2xlate === allStage, !memPte(2).isStage1Gpf(io.csr_dup(2).vsatp.mode),
-      Mux(refill.req_info_dup(2).s2xlate === onlyStage1, !(memPte(2).isAf() || memPte(2).isStage1Gpf(io.csr_dup(2).vsatp.mode)),
-      Mux(refill.req_info_dup(2).s2xlate === onlyStage2, !memPte(2).isGpf(refill.level_dup(2), mPBMTE),
-      !memPte(2).isAf())))
+      !flush_dup(2) &&
+      refill.levelOH.l3.get &&
+      !memPte(2).isLeaf() &&
+      memPte(2).canRefill(refill.level_dup(2), refill.req_info_dup(2).s2xlate, pbmte, io.csr_dup(2).vsatp.mode)
     ) {
       val refillIdx = replaceWrapper(l3v.get, ptwl3replace.get.way)
       refillIdx.suggestName(s"Ptwl3RefillIdx")
@@ -720,12 +715,12 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
     }
   }
 
+  // L2 refill
   when (
-    !flush_dup(2) && refill.levelOH.l2 && !memPte(2).isLeaf() && !memPte(2).isPf(refill.level_dup(2), pbmte) &&
-    Mux(refill.req_info_dup(2).s2xlate === allStage, !memPte(2).isStage1Gpf(io.csr_dup(2).vsatp.mode),
-    Mux(refill.req_info_dup(2).s2xlate === onlyStage1, !(memPte(2).isAf() || memPte(2).isStage1Gpf(io.csr_dup(2).vsatp.mode)),
-    Mux(refill.req_info_dup(2).s2xlate === onlyStage2, !memPte(2).isGpf(refill.level_dup(2), mPBMTE),
-    !memPte(2).isAf())))
+    !flush_dup(2) &&
+    refill.levelOH.l2 &&
+    !memPte(2).isLeaf() &&
+    memPte(2).canRefill(refill.level_dup(2), refill.req_info_dup(2).s2xlate, pbmte, io.csr_dup(2).vsatp.mode)
   ) {
     val refillIdx = replaceWrapper(l2v, ptwl2replace.way)
     refillIdx.suggestName(s"Ptwl2RefillIdx")
@@ -754,13 +749,8 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
     rfOH.suggestName(s"l2_rfOH")
   }
 
-  when (
-    !flush_dup(1) && refill.levelOH.l1 && !memPte(1).isLeaf() && !memPte(1).isPf(refill.level_dup(1), pbmte) &&
-    Mux(refill.req_info_dup(1).s2xlate === allStage, !memPte(1).isStage1Gpf(io.csr_dup(1).vsatp.mode),
-    Mux(refill.req_info_dup(1).s2xlate === onlyStage1, !(memPte(1).isAf() || memPte(1).isStage1Gpf(io.csr_dup(1).vsatp.mode)),
-    Mux(refill.req_info_dup(1).s2xlate === onlyStage2, !memPte(1).isGpf(refill.level_dup(1), mPBMTE),
-    !memPte(1).isAf())))
-  ) {
+  // L1 refill
+  when (!flush_dup(1) && refill.levelOH.l1) {
     val refillIdx = genPtwL1SetIdx(refill.req_info_dup(1).vpn)
     val victimWay = replaceWrapper(getl1vSet(refill.req_info_dup(1).vpn), ptwl1replace.way(refillIdx))
     val victimWayOH = UIntToOH(victimWay)
@@ -774,7 +764,8 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
       levelUInt = 1.U,
       refill_prefetch_dup(1),
       refill.req_info_dup(1).s2xlate,
-      pbmte
+      pbmte,
+      io.csr_dup(1).vsatp.mode
     )
     l1.io.w.apply(
       valid = true.B,
@@ -802,13 +793,8 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
     rfvOH.suggestName(s"l1_rfvOH")
   }
 
-  when (
-    !flush_dup(0) && refill.levelOH.l0 &&
-    Mux(refill.req_info_dup(0).s2xlate === allStage, !memPte(0).isStage1Gpf(io.csr_dup(0).vsatp.mode),
-    Mux(refill.req_info_dup(0).s2xlate === onlyStage1, !(memPte(0).isAf() || memPte(0).isStage1Gpf(io.csr_dup(0).vsatp.mode)),
-    Mux(refill.req_info_dup(0).s2xlate === onlyStage2, !memPte(0).isGpf(refill.level_dup(0), mPBMTE),
-    !memPte(0).isAf())))
-  ) {
+  // L0 refill
+  when (!flush_dup(0) && refill.levelOH.l0) {
     val refillIdx = genPtwL0SetIdx(refill.req_info_dup(0).vpn)
     val victimWay = replaceWrapper(getl0vSet(refill.req_info_dup(0).vpn), ptwl0replace.way(refillIdx))
     val victimWayOH = UIntToOH(victimWay)
@@ -822,7 +808,8 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
       levelUInt = 0.U,
       refill_prefetch_dup(0),
       refill.req_info_dup(0).s2xlate,
-      pbmte
+      pbmte,
+      io.csr_dup(0).vsatp.mode
     )
     l0.io.w.apply(
       valid = true.B,
@@ -853,11 +840,10 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
 
   // misc entries: super & invalid
   when (
-    !flush_dup(0) && refill.levelOH.sp && (memPte(0).isLeaf() || memPte(0).isPf(refill.level_dup(0), pbmte) &&
-    Mux(refill.req_info_dup(0).s2xlate === allStage, !memPte(0).isStage1Gpf(io.csr_dup(0).vsatp.mode),
-    Mux(refill.req_info_dup(0).s2xlate === onlyStage1, !(memPte(0).isAf() || memPte(0).isStage1Gpf(io.csr_dup(0).vsatp.mode)),
-    Mux(refill.req_info_dup(0).s2xlate === onlyStage2, !memPte(0).isGpf(refill.level_dup(0), mPBMTE),
-    !memPte(0).isAf()))))
+    !flush_dup(0) &&
+    refill.levelOH.sp &&
+    ((memPte(0).isLeaf() && memPte(0).canRefill(refill.level_dup(0), refill.req_info_dup(0).s2xlate, pbmte, io.csr_dup(0).vsatp.mode)) ||
+    memPte(0).onlyPf(refill.level_dup(0), refill.req_info_dup(0).s2xlate, pbmte))
   ) {
     val refillIdx = spreplace.way// LFSR64()(log2Up(l2tlbParams.spSize)-1,0) // TODO: may be LRU
     val rfOH = UIntToOH(refillIdx)
@@ -868,7 +854,7 @@ class PtwCache()(implicit p: Parameters) extends XSModule with HasPtwConst with 
       memSelData(0),
       refill.level_dup(0),
       refill_prefetch_dup(0),
-      !memPte(0).isPf(refill.level_dup(0), pbmte),
+      !memPte(0).onlyPf(refill.level_dup(0), refill.req_info_dup(0).s2xlate, pbmte)
     )
     spreplace.access(refillIdx)
     spv := spv | rfOH
