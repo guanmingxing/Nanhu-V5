@@ -167,7 +167,7 @@ class StoreQueue(implicit p: Parameters) extends XSModule
     val hartId = Input(UInt(hartIdLen.W))
     val enq = new SqEnqIO
     val brqRedirect = Flipped(ValidIO(new Redirect))
-    val vecFeedback = Vec(VecLoadPipelineWidth, Flipped(ValidIO(new FeedbackToLsqIO)))
+    val vecFeedback = Vec(VecStorePipelineWidth, Flipped(ValidIO(new FeedbackToLsqIO)))
     val storeAddrIn = Vec(StorePipelineWidth, Flipped(Valid(new LsPipelineBundle))) // store addr, data is not included
     val storeAddrInRe = Vec(StorePipelineWidth, Input(new LsPipelineBundle())) // store more mmio and exception
     val storeDataIn = Vec(StorePipelineWidth, Flipped(Valid(new MemExuOutput(isVector = true)))) // store data, send to sq from rs
